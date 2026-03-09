@@ -74,7 +74,7 @@ cdw() {
     fi
 }
 stowlink() { [ -z "$2" ] && echo "Usage: stowlink <dir> <pkg>" || (mkdir -p "$1" && stow -t "$1" "$2"); }
-
+stowlink-auto() { [ -z "$2" ] && echo "Usage: stowlink-auto <parent_path> <pkg>" || (T="${1%/}/$2" && mkdir -p "$T" && stow -t "$T" "$2"); }
 
 # --- Environment ---
 export MSYS=winsymlinks:nativestrict
