@@ -1,10 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==============================================================================
-# Script Name: Shizuku + Rish + ADB Setup Script (Fixed)
+# Script Name: Shizuku + Rish + ADB Setup Script (Ultimate Fix)
 # Platform   : Android (Termux)
 # Description: Automates Shizuku startup and Rish shell deployment.
-# Fixes      : Dynamic pathing, multi-device errors, and ELF binary execution.
+# Fixes      : Dynamic pathing, multi-device errors, ELF execution, and Aborted error.
 # ==============================================================================
 
 # --- 1. Global Config & Utility Functions ---
@@ -68,11 +68,11 @@ check_env() {
   log_info "Verifying 'rish_shizuku.dex' file..."
   if [ ! -f "${SOURCE_DEX}" ]; then
     log_error "File not found: ${SOURCE_DEX}"
-    log_warn "Please ensure the .dex file is in the same folder as this script."
+    log_warn "Please ensure 'rish_shizuku.dex' is in the same folder as this script."
     exit 1
   fi
 
-  log_info "Installing/Updating android-tools..."
+  log_info "Updating packages and installing android-tools..."
   pkg update -y >/dev/null 2>&1
   pkg install android-tools -y >/dev/null 2>&1
 }
@@ -85,7 +85,7 @@ gen_shizuku_script() {
   local TARGET_FILE="${BIN_DIR}/shizuku"
   log_info "Creating script: ${TARGET_FILE}"
 
-  # Use single quotes around 'EOF' to prevent local variable expansion
+  # Use single quotes around 'EOF' to prevent local shell from expanding variables
   tee "${TARGET_FILE}" >/dev/null <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
@@ -93,7 +93,7 @@ gen_shizuku_script() {
 PORT=$1
 TARGET_SERIAL="localhost:5555"
 
-# Validation
+# Input Validation
 if [ -z "$PORT" ]; then
     echo -e "\033[1;31m[ERROR]\033[0m Missing port number!"
     echo "Usage: shizuku <PORT>"
@@ -107,7 +107,7 @@ mkdir -p $TMPDIR
 echo "🔄 Connecting to Wireless Debugging on port ${PORT}..."
 adb connect "localhost:${PORT}"
 
-# Resolve "more than one device" conflict by switching to 5555
+# Handle multiple devices by forcing connection to 5555
 echo "⚙️ Setting TCP/IP to 5555..."
 adb -s "localhost:${PORT}" tcpip 5555
 sleep 1
@@ -115,27 +115,31 @@ adb connect $TARGET_SERIAL
 
 # --- Dynamic Path Resolution ---
 echo "🚀 Locating Shizuku installation..."
-
-# Query the system for the APK path (Fixes "inaccessible or not found")
 PKG_PATH=$(adb -s $TARGET_SERIAL shell pm path moe.shizuku.privileged.api | cut -d':' -f2)
 
 if [ -z "$PKG_PATH" ]; then
-    echo -e "\033[1;31m[FAIL]\033[0m Shizuku app not found on device."
+    echo -e "\033[1;31m[FAIL]\033[0m Shizuku app not found. Please install it first."
     exit 1
 fi
 
 echo "📦 Found Shizuku APK at: $PKG_PATH"
 
-# --- Execute Shizuku via app_process (Fixes ELF Syntax Error) ---
+# --- Execute Shizuku via app_process (Fixed logic for 'Aborted' error) ---
 echo "🚀 Sending start command via app_process..."
 
-# Modern Shizuku starting method using Java class loader
-adb -s $TARGET_SERIAL shell "CLASSPATH=$PKG_PATH app_process /system/bin rikka.shizuku.privileged.api.ShizukuLauncher"
+# Combining CLASSPATH export and app_process in a single string for execution
+# This avoids the 'Aborted' error and correctly launches the Java class
+START_CMD="export CLASSPATH=$PKG_PATH; exec app_process /system/bin rikka.shizuku.privileged.api.ShizukuLauncher"
 
-if [ $? -eq 0 ]; then
-    echo -e "\033[1;32m[SUCCESS]\033[0m Shizuku service started."
+adb -s $TARGET_SERIAL shell "$START_CMD"
+
+# Verify if service is actually running
+sleep 2
+if adb -s $TARGET_SERIAL shell ps -A | grep -q "shizuku_server"; then
+    echo -e "\033[1;32m[SUCCESS]\033[0m Shizuku service is now running."
 else
-    echo -e "\033[1;31m[FAIL]\033[0m Failed to start Shizuku service."
+    echo -e "\033[1;31m[FAIL]\033[0m Shizuku service failed to start or aborted."
+    echo "Tip: Ensure 'Disable adb authorization timeout' is ON in Developer Options."
 fi
 EOF
   log_success "Launcher script created."
@@ -152,6 +156,7 @@ gen_wf_script() {
   tee "${TARGET_FILE}" >/dev/null <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
 echo "⚙️ Opening Wireless Debugging Settings..."
+# Intent to open developer options and scroll to Wireless Debugging
 am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS \\
   --es ":settings:fragment_args_key" "toggle_adb_wireless" > /dev/null 2>&1
 EOF
@@ -163,21 +168,22 @@ EOF
 finalize_setup() {
   print_step 4 $TOTAL_STEPS "Deploying Rish & Finalizing"
 
-  # Generate 'rish' wrapper
+  # 1. Generate 'rish' wrapper
   local RISH_FILE="${BIN_DIR}/rish"
   log_info "Generating wrapper: ${RISH_FILE}"
 
   tee "${RISH_FILE}" >/dev/null <<EOF
 #!/data/data/com.termux/files/usr/bin/bash
+# Rish configuration
 export RISH_APPLICATION_ID="com.termux"
 /system/bin/app_process -Djava.class.path="${TARGET_DEX}" /system/bin --nice-name=rish rikka.shizuku.shell.ShizukuShellLoader "\${@}"
 EOF
 
-  # Deploy Dex file
+  # 2. Deploy Dex File
   log_info "Deploying Dex file..."
   cp -f "${SOURCE_DEX}" "${TARGET_DEX}"
 
-  # Set Permissions
+  # 3. Set Permissions
   log_info "Setting executable permissions..."
   chmod +x "${BIN_DIR}/shizuku" "${BIN_DIR}/rish" "${BIN_DIR}/wf"
 
@@ -187,6 +193,7 @@ EOF
 # --- Main Entry Point ---
 
 main() {
+  clear
   printf "${CYAN}====================================================${NC}\n"
   printf "${CYAN}    ✨ Shizuku + Rish + ADB Deployment Tool ✨      ${NC}\n"
   printf "${CYAN}====================================================${NC}\n"
@@ -200,8 +207,8 @@ main() {
   log_success "🎉 Deployment Completed Successfully!"
   echo ""
   printf "${YELLOW}Usage Guide:${NC}\n"
-  printf "  1. Type ${WHITE}wf${NC}            -> Enable Wireless Debugging (check the port).\n"
-  printf "  2. Type ${WHITE}shizuku <PORT>${NC} -> Connect and start Shizuku service.\n"
+  printf "  1. Type ${WHITE}wf${NC}            -> Go to Settings, enable Wireless Debugging.\n"
+  printf "  2. Type ${WHITE}shizuku <PORT>${NC} -> Start the Shizuku service.\n"
   printf "  3. Type ${WHITE}rish${NC}          -> Enter Shizuku Root Shell.\n"
 }
 
