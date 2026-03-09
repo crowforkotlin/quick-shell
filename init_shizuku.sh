@@ -1,10 +1,10 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==============================================================================
-# Script Name: Shizuku + Rish + ADB Setup Script (Final Robust Version)
+# Script Name: Shizuku + Rish + ADB Setup Script (Official Path Fix)
 # Platform   : Android (Termux)
-# Description: Automates Shizuku startup and Rish shell deployment.
-# Fixes      : Dynamic pathing, multi-device errors, ELF binary, and Aborted error.
+# Description: Automates Shizuku startup using the internal .so shell script.
+# Fixes      : Dynamic pathing, ELF syntax error, and Phantom Process termination.
 # ==============================================================================
 
 # --- 1. Global Config & Utility Functions ---
@@ -65,13 +65,13 @@ print_step() {
 check_env() {
   print_step 1 $TOTAL_STEPS "Environment & Dependency Check"
 
-  log_info "Verifying 'rish_shizuku.dex' file..."
+  log_info "Verifying 'rish_shizuku.dex'..."
   if [ ! -f "${SOURCE_DEX}" ]; then
     log_error "File not found: ${SOURCE_DEX}"
     exit 1
   fi
 
-  log_info "Ensuring android-tools (ADB) is installed..."
+  log_info "Ensuring ADB is installed..."
   pkg update -y >/dev/null 2>&1
   pkg install android-tools -y >/dev/null 2>&1
 }
@@ -84,6 +84,7 @@ gen_shizuku_script() {
   local TARGET_FILE="${BIN_DIR}/shizuku"
   log_info "Creating script: ${TARGET_FILE}"
 
+  # Use 'EOF' to prevent local variable expansion
   tee "${TARGET_FILE}" >/dev/null <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
 
@@ -107,52 +108,45 @@ adb -s "localhost:${PORT}" tcpip 5555
 sleep 1
 adb connect $TARGET_SERIAL
 
-# --- Dynamic Path & Starter Resolution ---
-echo "🚀 Locating Shizuku installation..."
-# Get base path of the package
-PKG_INFO=$(adb -s $TARGET_SERIAL shell pm path moe.shizuku.privileged.api | cut -d':' -f2)
-BASE_PATH=$(echo "$PKG_INFO" | sed 's/base.apk//g')
+# --- Dynamic Path Resolution (Finding that .so file) ---
+echo "🚀 Locating Shizuku starter..."
+PKG_PATH=$(adb -s $TARGET_SERIAL shell pm path moe.shizuku.privileged.api | cut -d':' -f2 | sed 's/base.apk//g')
 
-if [ -z "$BASE_PATH" ]; then
-    echo -e "\033[1;31m[FAIL]\033[0m Shizuku not found."
+if [ -z "$PKG_PATH" ]; then
+    echo -e "\033[1;31m[FAIL]\033[0m Shizuku app not found."
     exit 1
 fi
 
-# Modern Shizuku stores the starter script as a .so file
-# We check both arm64 and arm paths
-STARTER="${BASE_PATH}lib/arm64/libshizuku.so"
+# Construct the official .so starter path
+STARTER="${PKG_PATH}lib/arm64/libshizuku.so"
+# Fallback for 32-bit devices
 if ! adb -s $TARGET_SERIAL shell ls "$STARTER" > /dev/null 2>&1; then
-    STARTER="${BASE_PATH}lib/arm/libshizuku.so"
+    STARTER="${PKG_PATH}lib/arm/libshizuku.so"
 fi
 
-echo "📦 Starter found: $STARTER"
+echo "📦 Found starter at: $STARTER"
 
-# --- Execution using 'sh' to bypass ELF/Aborted errors ---
-echo "🚀 Sending start command..."
+# --- The Crucial Execution Step ---
+echo "🚀 Executing Shizuku via official starter..."
 
-# We use 'sh' to execute the .so script and nohup to keep it alive
+# 1. We use 'sh' to tell the system this .so is a script (Fixes ELF error)
+# 2. We use 'nohup' and '&' to detach from the terminal (Fixes Aborted error)
 adb -s $TARGET_SERIAL shell "nohup sh $STARTER start > /dev/null 2>&1 &"
 
-# Verification phase
-echo "🔍 Verifying service status..."
+# Final Verification
+echo "🔍 Checking service status..."
 sleep 3
 if adb -s $TARGET_SERIAL shell ps -A | grep -q "shizuku_server"; then
-    echo -e "\033[1;32m[SUCCESS]\033[0m Shizuku service is running."
+    echo -e "\033[1;32m[SUCCESS]\033[0m Shizuku is now running in the background."
 else
-    echo "⚠️  Standard starter failed. Attempting app_process fallback..."
-    adb -s $TARGET_SERIAL shell "export CLASSPATH=$PKG_INFO; nohup app_process /system/bin rikka.shizuku.privileged.api.ShizukuLauncher > /dev/null 2>&1 &"
-    sleep 2
-    if adb -s $TARGET_SERIAL shell ps -A | grep -q "shizuku_server"; then
-         echo -e "\033[1;32m[SUCCESS]\033[0m Shizuku started via fallback."
-    else
-         echo -e "\033[1;31m[FAIL]\033[0m Could not start Shizuku. Please open Shizuku app manually."
-    fi
+    echo -e "\033[1;31m[FAIL]\033[0m Service did not stay alive."
+    echo "Tip: Check 'Disable adb authorization timeout' in Developer Options."
 fi
 EOF
   log_success "Launcher script created."
 }
 
-# --- 4. Generate Shortcut Script (wf) ---
+# --- 4. Generate Settings Shortcut (wf) ---
 
 gen_wf_script() {
   print_step 3 $TOTAL_STEPS "Generating Settings Shortcut (wf)"
@@ -166,7 +160,7 @@ EOF
   log_success "Shortcut script created."
 }
 
-# --- 5. Generate Rish Shell & Finalize ---
+# --- 5. Finalize Rish Shell ---
 
 finalize_setup() {
   print_step 4 $TOTAL_STEPS "Deploying Rish & Finalizing"
@@ -181,7 +175,7 @@ EOF
   log_success "All scripts installed."
 }
 
-# --- Main ---
+# --- Main Entry ---
 
 main() {
   printf "${CYAN}====================================================${NC}\n"
@@ -192,7 +186,7 @@ main() {
   gen_wf_script
   finalize_setup
   echo ""
-  log_success "🎉 Done! Use 'wf' then 'shizuku <PORT>' then 'rish'."
+  log_success "🎉 Done! Use 'wf', then 'shizuku <PORT>', then 'rish'."
 }
 
 main
