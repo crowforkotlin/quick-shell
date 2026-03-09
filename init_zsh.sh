@@ -73,6 +73,7 @@ cdw() {
         echo "找不到程序: $1"
     fi
 }
+stowlink() { [ -z "$2" ] && echo "Usage: stowlink <dir> <pkg>" || (mkdir -p "$1" && stow -t "$1" "$2"); }
 
 
 # --- Environment ---
@@ -482,4 +483,3 @@ main() {
 }
 
 main
-
