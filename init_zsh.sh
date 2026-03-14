@@ -38,30 +38,17 @@ fi
 
 # --- Quick Functions ---
 lt() {
-    local depth=10  # 默认深度
-    local target="." # 默认路径
+    local depth=10
+    local target="."
 
-    # 逻辑：遍历所有参数
-    for arg in "$@"; do
+    for arg in "$@"; do  # 必须用 "$@" 获取所有参数
         if [[ "$arg" =~ ^[0-9]+$ ]]; then
-            # 如果是纯数字，赋值给深度
-            depth=$arg
+            depth="$arg"
         elif [ -d "$arg" ] || [ -f "$arg" ]; then
-            # 如果是存在的目录或文件，赋值给目标路径
-            target="$arg"
-        else
-            # 兼容处理：如果路径不存在但也不是数字（如打错字），也传给 lsd 让其报错
             target="$arg"
         fi
     done
 
-    # 检查 lsd 命令是否存在
-    if ! command -v lsd &> /dev/null; then
-        echo "Error: 'lsd' is not installed or not in PATH."
-        return 1
-    fi
-
-    # 执行命令
     lsd --tree --depth "$depth" --blocks name "$target"
 }
 cdw() {
