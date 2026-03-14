@@ -62,6 +62,7 @@ cdw() {
 }
 stowlink() { [ -z "$2" ] && echo "Usage: stowlink <dir> <pkg>" || (mkdir -p "$1" && stow -t "$1" "$2"); }
 stowlink-auto() { [ -z "$2" ] && echo "Usage: stowlink-auto <parent_path> <pkg>" || (T="${1%/}/$2" && mkdir -p "$T" && stow -t "$T" "$2"); }
+stowlink-dir() { [ -z "$2" ] && echo "Usage: stowlink-dir <parent> <pkg>" || { [ -d "$PWD/$2" ] && mkdir -p "$1" && ln -sfn "$PWD/$2" "${1%/}/$2" && echo "Linked: ${1%/}/$2 -> $PWD/$2"; } }
 
 # --- Environment ---
 export MSYS=winsymlinks:nativestrict
