@@ -9,19 +9,24 @@
 # [USER CONFIG] .zshrc Template
 # ==============================================================================
 get_zshrc_template() {
-  cat <<EOF
+  # ⚠️  heredoc 分三段：
+  #     1. 'ZSHRC_EOF'  单引号 → 原样输出，$var 不展开（函数体、别名等）
+  #     2. ZSHRC_TARGET 双引号 → 展开 TARGET_DIR（安装脚本注入）
+  #     3. 'ZSHRC_EOF2' 单引号 → 原样输出剩余内容
+
+  cat <<'ZSHRC_EOF'
 # ==============================================================================
 # Zinit Core Initialization
 # ==============================================================================
-ZINIT_HOME="\${XDG_DATA_HOME:-\${HOME}/.local/share}/zinit/zinit.git"
+ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
 
 # Auto-install zinit if missing
-if [ ! -d "\$ZINIT_HOME" ]; then
-    mkdir -p "\$(dirname \$ZINIT_HOME)"
-    git clone https://github.com/zdharma-continuum/zinit.git "\$ZINIT_HOME"
+if [ ! -d "$ZINIT_HOME" ]; then
+    mkdir -p "$(dirname $ZINIT_HOME)"
+    git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
 fi
 
-source "\${ZINIT_HOME}/zinit.zsh"
+source "${ZINIT_HOME}/zinit.zsh"
 
 # ==============================================================================
 # Theme: Powerlevel10k
@@ -44,9 +49,14 @@ zinit light agkozak/zsh-z
 # fzf tab completion
 zinit light Aloxaf/fzf-tab
 
-# OMZ snippets (extract, git aliases, etc.)
+# OMZ snippets (git aliases, extract, etc.)
 zinit snippet OMZP::git
 zinit snippet OMZP::extract
+
+# fzf key bindings (Ctrl+R / Ctrl+T / Alt+C)
+# wait'0' 异步加载，避免阻塞 instant prompt
+zinit ice lucid wait'0' multisrc'shell/key-bindings.zsh shell/completion.zsh'
+zinit light junegunn/fzf
 
 # ==============================================================================
 # Completion System
@@ -60,6 +70,10 @@ zinit cdreplay -q
 # 解决 Java/Gradle 等输出乱码问题
 export JAVA_TOOL_OPTIONS="-Duser.language=en -Duser.country=US"
 
+ZSHRC_EOF
+
+  # TARGET_DIR 需要从安装脚本展开，单独输出这一段
+  cat <<ZSHRC_TARGET
 # --- Quick Shell Auto-Loader ---
 QS_DIR="${TARGET_DIR}"
 if [ -d "\$QS_DIR" ]; then
@@ -69,9 +83,13 @@ if [ -d "\$QS_DIR" ]; then
             alias_name="\${filename%.*}"
             alias "\$alias_name"="bash '\$script'"
         fi
-    done    
+    done
 fi
 
+ZSHRC_TARGET
+
+  # 剩余内容：函数体和别名，全部原样输出
+  cat <<'ZSHRC_EOF2'
 # --- Quick Functions ---
 lt() {
     local depth=10
@@ -113,11 +131,9 @@ alias ls=lsd
 alias ll='lsd -l'
 alias la='lsd -a'
 alias cat=bat
-alias catAll=bat --paging=never
+alias catAll='bat --paging=never'
 alias gitpm='git -c core.quotepath=false fetch origin --recurse-submodules=no --progress --prune'
-
-
-EOF
+ZSHRC_EOF2
 }
 
 # ==============================================================================
@@ -408,11 +424,12 @@ install_plugins() {
   ZINIT_PLUGINS="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins"
 
   echo "Processing Plugin List..."
-  manage_plugin "Powerlevel10k"        "https://github.com/romkatv/powerlevel10k.git"                    "${ZINIT_PLUGINS}/romkatv---powerlevel10k"
-  manage_plugin "Syntax Highlighting"  "https://github.com/zsh-users/zsh-syntax-highlighting"            "${ZINIT_PLUGINS}/zsh-users---zsh-syntax-highlighting"
-  manage_plugin "Auto Suggestions"     "https://github.com/zsh-users/zsh-autosuggestions"                "${ZINIT_PLUGINS}/zsh-users---zsh-autosuggestions"
-  manage_plugin "zsh-z"                "https://github.com/agkozak/zsh-z"                               "${ZINIT_PLUGINS}/agkozak---zsh-z"
-  manage_plugin "fzf-tab"              "https://github.com/Aloxaf/fzf-tab"                              "${ZINIT_PLUGINS}/Aloxaf---fzf-tab"
+  manage_plugin "Powerlevel10k" "https://github.com/romkatv/powerlevel10k.git" "${ZINIT_PLUGINS}/romkatv---powerlevel10k"
+  manage_plugin "Syntax Highlighting" "https://github.com/zsh-users/zsh-syntax-highlighting" "${ZINIT_PLUGINS}/zsh-users---zsh-syntax-highlighting"
+  manage_plugin "Auto Suggestions" "https://github.com/zsh-users/zsh-autosuggestions" "${ZINIT_PLUGINS}/zsh-users---zsh-autosuggestions"
+  manage_plugin "zsh-z" "https://github.com/agkozak/zsh-z" "${ZINIT_PLUGINS}/agkozak---zsh-z"
+  manage_plugin "fzf-tab" "https://github.com/Aloxaf/fzf-tab" "${ZINIT_PLUGINS}/Aloxaf---fzf-tab"
+  manage_plugin "fzf" "https://github.com/junegunn/fzf" "${ZINIT_PLUGINS}/junegunn---fzf"
 
   log_success "All plugins deployed successfully."
 }
@@ -512,3 +529,4 @@ main() {
 }
 
 main
+
