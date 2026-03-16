@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==============================================================================
-# Script Name: Zsh + OMZ + QuickShell Automated Deployment
+# Script Name: Zsh + Zinit + QuickShell Automated Deployment
 # Platform   : Windows (MSYS2/Git Bash), Linux, macOS, Android (Termux)
 # ==============================================================================
 
@@ -10,19 +10,55 @@
 # ==============================================================================
 get_zshrc_template() {
   cat <<EOF
-# Path to your oh-my-zsh installation.
-export ZSH="\$HOME/.oh-my-zsh"
+# ==============================================================================
+# Zinit Core Initialization
+# ==============================================================================
+ZINIT_HOME="\${XDG_DATA_HOME:-\${HOME}/.local/share}/zinit/zinit.git"
 
-# Theme settings
-ZSH_THEME="powerlevel10k/powerlevel10k"
+# Auto-install zinit if missing
+if [ ! -d "\$ZINIT_HOME" ]; then
+    mkdir -p "\$(dirname \$ZINIT_HOME)"
+    git clone https://github.com/zdharma-continuum/zinit.git "\$ZINIT_HOME"
+fi
 
+source "\${ZINIT_HOME}/zinit.zsh"
+
+# ==============================================================================
+# Theme: Powerlevel10k
+# ==============================================================================
+zinit ice depth=1
+zinit light romkatv/powerlevel10k
+
+# ==============================================================================
 # Plugins
-plugins=(git zsh-syntax-highlighting zsh-autosuggestions z extract fzf)
+# ==============================================================================
+# Syntax Highlighting (must be loaded last or near last)
+zinit light zsh-users/zsh-syntax-highlighting
+
+# Auto Suggestions
+zinit light zsh-users/zsh-autosuggestions
+
+# z - jump to frecent directories
+zinit light agkozak/zsh-z
+
+# fzf tab completion
+zinit light Aloxaf/fzf-tab
+
+# OMZ snippets (extract, git aliases, etc.)
+zinit snippet OMZP::git
+zinit snippet OMZP::extract
+
+# ==============================================================================
+# Completion System
+# ==============================================================================
+autoload -Uz compinit
+compinit
+
+# Replay all cached completions (zinit optimization)
+zinit cdreplay -q
 
 # 解决 Java/Gradle 等输出乱码问题
 export JAVA_TOOL_OPTIONS="-Duser.language=en -Duser.country=US"
-
-source \$ZSH/oh-my-zsh.sh
 
 # --- Quick Shell Auto-Loader ---
 QS_DIR="${TARGET_DIR}"
@@ -54,7 +90,7 @@ lt() {
 cdw() {
     local target=$(which "$1" 2>/dev/null)
     if [ -n "$target" ]; then
-        # pushd 会把当前目录压入“栈”中，然后跳转
+        # pushd 会把当前目录压入"栈"中，然后跳转
         pushd "$(dirname "$target")" > /dev/null
     else
         echo "找不到程序: $1"
@@ -316,7 +352,8 @@ config_zshrc() {
 
   if [ "$CLEAN_INSTALL" = true ]; then
     log_info "Cleaning up old configurations..."
-    rm -rf "$HOME/.zshrc" "$HOME/.oh-my-zsh"
+    # Remove old .zshrc and zinit data directory
+    rm -rf "$HOME/.zshrc" "${XDG_DATA_HOME:-$HOME/.local/share}/zinit"
 
     log_info "Creating Quick Shell directory..."
     mkdir -p "$TARGET_DIR"
@@ -332,20 +369,19 @@ config_zshrc() {
   fi
 }
 
-# --- 5. Plugin Installation (OMZ & Plugins) ---
+# --- 5. Plugin Installation (Zinit & Plugins) ---
 
 install_plugins() {
   print_step 4 $TOTAL_STEPS "Plugin Deployment"
 
-  # Install Oh My Zsh Core
-  if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    log_info "Installing Oh My Zsh Framework..."
-    export RUNZSH=no
-    export KEEP_ZSHRC=yes
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended >/dev/null
-  fi
+  ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
 
-  ZSH_CUSTOM=${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}
+  # Install Zinit Core
+  if [ ! -d "$ZINIT_HOME" ]; then
+    log_info "Installing Zinit Plugin Manager..."
+    mkdir -p "$(dirname "$ZINIT_HOME")"
+    git clone --depth=1 https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME" -q
+  fi
 
   # Plugin Manager
   manage_plugin() {
@@ -368,10 +404,15 @@ install_plugins() {
     fi
   }
 
+  # Zinit stores plugins under its own data directory
+  ZINIT_PLUGINS="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins"
+
   echo "Processing Plugin List..."
-  manage_plugin "Powerlevel10k" "https://github.com/romkatv/powerlevel10k.git" "${ZSH_CUSTOM}/themes/powerlevel10k"
-  manage_plugin "Syntax Highlighting" "https://github.com/zsh-users/zsh-syntax-highlighting" "${ZSH_CUSTOM}/plugins/zsh-syntax-highlighting"
-  manage_plugin "Auto Suggestions" "https://github.com/zsh-users/zsh-autosuggestions" "${ZSH_CUSTOM}/plugins/zsh-autosuggestions"
+  manage_plugin "Powerlevel10k"        "https://github.com/romkatv/powerlevel10k.git"                    "${ZINIT_PLUGINS}/romkatv---powerlevel10k"
+  manage_plugin "Syntax Highlighting"  "https://github.com/zsh-users/zsh-syntax-highlighting"            "${ZINIT_PLUGINS}/zsh-users---zsh-syntax-highlighting"
+  manage_plugin "Auto Suggestions"     "https://github.com/zsh-users/zsh-autosuggestions"                "${ZINIT_PLUGINS}/zsh-users---zsh-autosuggestions"
+  manage_plugin "zsh-z"                "https://github.com/agkozak/zsh-z"                               "${ZINIT_PLUGINS}/agkozak---zsh-z"
+  manage_plugin "fzf-tab"              "https://github.com/Aloxaf/fzf-tab"                              "${ZINIT_PLUGINS}/Aloxaf---fzf-tab"
 
   log_success "All plugins deployed successfully."
 }
@@ -450,7 +491,7 @@ fi
 main() {
   # Clear screen
   printf "${MAGENTA}====================================================${NC}\n"
-  printf "${MAGENTA}   ✨ Zsh + OMZ + QuickShell Setup Script ✨      ${NC}\n"
+  printf "${MAGENTA}   ✨ Zsh + Zinit + QuickShell Setup Script ✨     ${NC}\n"
   printf "${MAGENTA}====================================================${NC}\n"
 
   detect_env
