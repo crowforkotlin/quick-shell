@@ -114,6 +114,27 @@ cdw() {
         echo "找不到程序: $1"
     fi
 }
+# Copy git diff + status to clipboard
+gitdc() {
+    local output
+    output=$(git -p diff head 2>&1; echo "---"; git status 2>&1)
+    
+    # Clipboard detection: Windows (clip.exe) / macOS (pbcopy) / Linux (xclip/xsel)
+    if command -v clip.exe >/dev/null 2>&1; then
+        echo "$output" | clip.exe
+    elif command -v pbcopy >/dev/null 2>&1; then
+        echo "$output" | pbcopy
+    elif command -v xclip >/dev/null 2>&1; then
+        echo "$output" | xclip -selection clipboard
+    elif command -v xsel >/dev/null 2>&1; then
+        echo "$output" | xsel --clipboard --input
+    else
+        echo "❌ No clipboard tool found"
+        return 1
+    fi
+
+    echo "✅ Copied to clipboard ($(echo "$output" | wc -l) lines)"
+}
 stowlink() { [ -z "$2" ] && echo "Usage: stowlink <dir> <pkg>" || (mkdir -p "$1" && stow -t "$1" "$2"); }
 stowlink-auto() { [ -z "$2" ] && echo "Usage: stowlink-auto <parent_path> <pkg>" || (T="${1%/}/$2" && mkdir -p "$T" && stow -t "$T" "$2"); }
 stowlink-dir() { [ -z "$2" ] && echo "Usage: stowlink-dir <parent> <pkg>" || { [ -d "$PWD/$2" ] && mkdir -p "$1" && ln -sfn "$PWD/$2" "${1%/}/$2" && echo "Linked: ${1%/}/$2 -> $PWD/$2"; } }
@@ -139,8 +160,7 @@ export NO_PROXY="localhost,127.0.0.1"
 alias ls=lsd
 alias ll='lsd -l'
 alias la='lsd -a'
-alias cat=bat
-alias catAll='bat --paging=never'
+alias batall='bat --paging=never'
 alias gitpm='git -c core.quotepath=false fetch origin --recurse-submodules=no --progress --prune'
 ZSHRC_EOF2
 }
