@@ -118,12 +118,21 @@ stowlink() { [ -z "$2" ] && echo "Usage: stowlink <dir> <pkg>" || (mkdir -p "$1"
 stowlink-auto() { [ -z "$2" ] && echo "Usage: stowlink-auto <parent_path> <pkg>" || (T="${1%/}/$2" && mkdir -p "$T" && stow -t "$T" "$2"); }
 stowlink-dir() { [ -z "$2" ] && echo "Usage: stowlink-dir <parent> <pkg>" || { [ -d "$PWD/$2" ] && mkdir -p "$1" && ln -sfn "$PWD/$2" "${1%/}/$2" && echo "Linked: ${1%/}/$2 -> $PWD/$2"; } }
 
+# --- History ---
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=15000
+SAVEHIST=20000
+setopt HIST_IGNORE_DUPS      # Skip duplicate commands
+setopt HIST_IGNORE_SPACE     # Skip commands prefixed with space
+setopt INC_APPEND_HISTORY    # Write to history immediately, not on exit
+setopt SHARE_HISTORY         # Share history across all open sessions
+
 # --- Environment ---
 export MSYS=winsymlinks:nativestrict
 export http_proxy=http://127.0.0.1:7890
 export https_proxy=http://127.0.0.1:7890
-export no_proxy="localhost,127.0.0.1,google.com,pub.dev"
-export NO_PROXY="localhost,127.0.0.1,google.com,pub.dev"
+export no_proxy="localhost,127.0.0.1"
+export NO_PROXY="localhost,127.0.0.1"
 
 
 # --- Aliases ---
@@ -529,4 +538,3 @@ main() {
 }
 
 main
-
