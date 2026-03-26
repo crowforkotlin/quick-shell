@@ -38,7 +38,16 @@ zinit light romkatv/powerlevel10k
 # Plugins
 # ==============================================================================
 # Syntax Highlighting (must be loaded last or near last)
-zinit light zsh-users/zsh-syntax-highlighting
+# Only apply this block in Windows environments (Git Bash / MSYS2)
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    
+    # Disable syntax highlighting in VS Code integrated terminal 
+    # to prevent input lag and UI stuttering on Windows.
+    if [[ "$TERM_PROGRAM" != "vscode" ]]; then
+        zinit light zsh-users/zsh-syntax-highlighting
+    fi
+
+fi
 
 # Auto Suggestions
 zinit light zsh-users/zsh-autosuggestions
@@ -91,53 +100,15 @@ ZSHRC_TARGET
   # 剩余内容：函数体和别名，全部原样输出
   cat <<'ZSHRC_EOF2'
 # --- Quick Functions ---
-lt() {
-    local depth=10
-    local target="."
+lt(){ d=10; t="."; for a in "$@"; do [[ "$a" =~ ^[0-9]+$ ]] && d="$a" || { [[ -e "$a" ]] && t="$a"; }; done; lsd --tree --depth "$d" --blocks name "$t"; }
+cdw(){ t=$(which "$1" 2>/dev/null); [[ -n "$t" ]] && { pushd "$(dirname "$t")" > /dev/null; } || echo "找不到程序: $1"; }
 
-    for arg in "$@"; do  # 必须用 "$@" 获取所有参数
-        if [[ "$arg" =~ ^[0-9]+$ ]]; then
-            depth="$arg"
-        elif [ -d "$arg" ] || [ -f "$arg" ]; then
-            target="$arg"
-        fi
-    done
-
-    lsd --tree --depth "$depth" --blocks name "$target"
-}
-cdw() {
-    local target=$(which "$1" 2>/dev/null)
-    if [ -n "$target" ]; then
-        # pushd 会把当前目录压入"栈"中，然后跳转
-        pushd "$(dirname "$target")" > /dev/null
-    else
-        echo "找不到程序: $1"
-    fi
-}
-# Copy git diff + status to clipboard
-gitdc() {
-    local output
-    output=$(git -p diff head 2>&1; echo "---"; git status 2>&1)
-    
-    # Clipboard detection: Windows (clip.exe) / macOS (pbcopy) / Linux (xclip/xsel)
-    if command -v clip.exe >/dev/null 2>&1; then
-        echo "$output" | clip.exe
-    elif command -v pbcopy >/dev/null 2>&1; then
-        echo "$output" | pbcopy
-    elif command -v xclip >/dev/null 2>&1; then
-        echo "$output" | xclip -selection clipboard
-    elif command -v xsel >/dev/null 2>&1; then
-        echo "$output" | xsel --clipboard --input
-    else
-        echo "❌ No clipboard tool found"
-        return 1
-    fi
-
-    echo "✅ Copied to clipboard ($(echo "$output" | wc -l) lines)"
-}
+gitdc(){ o=$(git -p diff HEAD;echo "---";git status); echo "$o" | { pbcopy || clip.exe || xclip -sel c || xsel -b; } && echo "✅ Copied ($(echo "$o" | wc -l) lines)"; }
+gitdf(){ o=$(git -p diff HEAD;echo "---";git status); echo "$o" > "${1:-commit_message.txt}" && echo "✅ Saved to ${1:-commit_message.txt} ($(echo "$o" | wc -l) lines)"; }
 stowlink() { [ -z "$2" ] && echo "Usage: stowlink <dir> <pkg>" || (mkdir -p "$1" && stow -t "$1" "$2"); }
 stowlink-auto() { [ -z "$2" ] && echo "Usage: stowlink-auto <parent_path> <pkg>" || (T="${1%/}/$2" && mkdir -p "$T" && stow -t "$T" "$2"); }
 stowlink-dir() { [ -z "$2" ] && echo "Usage: stowlink-dir <parent> <pkg>" || { [ -d "$PWD/$2" ] && mkdir -p "$1" && ln -sfn "$PWD/$2" "${1%/}/$2" && echo "Linked: ${1%/}/$2 -> $PWD/$2"; } }
+mf() { local dir="${1:-.}"; [[ "$dir" != /* ]] && dir="$PWD/$dir"; local out=""; local files=(); while IFS= read -r -d '' f; do files+=("$f"); done < <(find "$dir" -type f -print0 | sort -z); for f in "${files[@]}"; do out+="--- $(basename "$f") ---"$'\n'"$(cat "$f")"$'\n\n'; done; if [ ${#out} -gt 1000 ]; then echo "$out" > contents.txt; echo "Saved to contents.txt"; else echo "$out" | tee /dev/clipboard 2>/dev/null || echo "$out" | { command -v pbcopy &>/dev/null && pbcopy || command -v xclip &>/dev/null && xclip -selection clipboard || command -v xsel &>/dev/null && xsel --clipboard --input || clip; }; echo "Copied to clipboard"; fi; }
 
 # --- History ---
 HISTFILE="$HOME/.zsh_history"
@@ -162,6 +133,21 @@ alias ll='lsd -l'
 alias la='lsd -a'
 alias batall='bat --paging=never'
 alias gitpm='git -c core.quotepath=false fetch origin --recurse-submodules=no --progress --prune'
+
+# Fix Ctrl+Arrow in Git Bash / Windows Terminal
+# Fix arrow keys
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+  bindkey "^[[A" up-line-or-history    # Up
+  bindkey "^[[B" down-line-or-history  # Down
+  bindkey "^[[C" forward-char          # Right
+  bindkey "^[[D" backward-char         # Left
+
+  # Fix Ctrl+Arrow
+  bindkey "^[[1;5C" forward-word       # Ctrl+Right
+  bindkey "^[[1;5D" backward-word      # Ctrl+Left
+  bindkey "^[[1;5A" up-line-or-history # Ctrl+Up
+  bindkey "^[[1;5B" down-line-or-history # Ctrl+Down
+fi
 ZSHRC_EOF2
 }
 
