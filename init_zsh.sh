@@ -109,7 +109,7 @@ stowlink() { [ -z "$2" ] && echo "Usage: stowlink <dir> <pkg>" || (mkdir -p "$1"
 stowlink-auto() { [ -z "$2" ] && echo "Usage: stowlink-auto <parent_path> <pkg>" || (T="${1%/}/$2" && mkdir -p "$T" && stow -t "$T" "$2"); }
 stowlink-dir() { [ -z "$2" ] && echo "Usage: stowlink-dir <parent> <pkg>" || { [ -d "$PWD/$2" ] && mkdir -p "$1" && ln -sfn "$PWD/$2" "${1%/}/$2" && echo "Linked: ${1%/}/$2 -> $PWD/$2"; } }
 mf() { local dir="${1:-.}"; [[ "$dir" != /* ]] && dir="$PWD/$dir"; local out=""; local files=(); while IFS= read -r -d '' f; do files+=("$f"); done < <(find "$dir" -type f -print0 | sort -z); for f in "${files[@]}"; do out+="--- $(basename "$f") ---"$'\n'"$(cat "$f")"$'\n\n'; done; if [ ${#out} -gt 1000 ]; then echo "$out" > contents.txt; echo "Saved to contents.txt"; else echo "$out" | tee /dev/clipboard 2>/dev/null || echo "$out" | { command -v pbcopy &>/dev/null && pbcopy || command -v xclip &>/dev/null && xclip -selection clipboard || command -v xsel &>/dev/null && xsel --clipboard --input || clip; }; echo "Copied to clipboard"; fi; }
-
+gitmerge() { git -c log.showSignature=false merge "origin/${1:-$(git branch --show-current)}" --no-stat -v; }
 # --- History ---
 HISTFILE="$HOME/.zsh_history"
 HISTSIZE=15000
@@ -132,7 +132,7 @@ alias ls=lsd
 alias ll='lsd -l'
 alias la='lsd -a'
 alias batall='bat --paging=never'
-alias gitpm='git -c core.quotepath=false fetch origin --recurse-submodules=no --progress --prune'
+alias gitfetch='git -c log.showSignature=false -c core.quotepath=false fetch origin --recurse-submodules=no --progress --prune'
 
 # Fix Ctrl+Arrow in Git Bash / Windows Terminal
 # Fix arrow keys
