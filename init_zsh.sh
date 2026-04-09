@@ -252,7 +252,7 @@ detect_env() {
       INSTALL_CMD="pacman -S --noconfirm"
       UPDATE_CMD="pacman -Sy"
       # Windows specific packages
-      PACKAGES_EXT="mingw-w64-x86_64-lsd mingw-w64-x86_64-bat mingw-w64-x86_64-fzf"
+      PACKAGES_EXT="mingw-w64-ucrt-x86_64-lsd mingw-w64-ucrt-x86_64-bat mingw-w64-ucrt-x86_64-fzf"
     else
       log_error "Pacman package manager not found!"
       log_warn "This script relies on MSYS2 environment. Please ensure you are using full MSYS2 or Git Bash with Pacman."
