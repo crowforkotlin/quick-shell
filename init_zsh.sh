@@ -123,7 +123,6 @@ setopt SHARE_HISTORY         # Share history across all open sessions
 export MSYS=winsymlinks:nativestrict
 export http_proxy=http://127.0.0.1:7890
 export https_proxy=http://127.0.0.1:7890
-export no_proxy="localhost,127.0.0.1"
 export NO_PROXY="localhost,127.0.0.1"
 
 
