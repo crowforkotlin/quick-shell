@@ -163,8 +163,6 @@ bindkey "^[[3;3~" kill-word              # Alt + Delete (向后删除整个单�
 
 bindkey '^[^?' backward-kill-word        # Alt + Backspace (向前删除单词)
 bindkey '^[^H' backward-kill-word        # Alt + Backspace (变种)
-bindkey '^H' backward-kill-word          # Ctrl + Backspace (向前删除单词)
-bindkey '^W' backward-kill-word          # Ctrl + Backspace (传统Unix变种)
 
 # 3. 修复 Home 和 End 键
 bindkey "^[[H" beginning-of-line
