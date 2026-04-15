@@ -15,6 +15,15 @@ get_zshrc_template() {
   #     3. 'ZSHRC_EOF2' 单引号 → 原样输出剩余内容
 
   cat <<'ZSHRC_EOF'
+# --- 1. 修复 tmux 下的 UTF-8 和色彩问题 ---
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+# 只在 tmux 外部设置，tmux 内部不覆盖
+if [[ -z "$TMUX" ]]; then
+    export TERM=xterm-256color
+fi
+
 # ==============================================================================
 # Zinit Core Initialization
 # ==============================================================================
