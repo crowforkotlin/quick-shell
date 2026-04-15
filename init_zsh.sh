@@ -137,16 +137,49 @@ alias gitfetch='git -c log.showSignature=false -c core.quotepath=false fetch ori
 # Fix arrow keys
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
   bindkey "^[[A" up-line-or-history    # Up
-  bindkey "^[[B" down-line-or-history  # Down
-  bindkey "^[[C" forward-char          # Right
-  bindkey "^[[D" backward-char         # Left
-
-  # Fix Ctrl+Arrow
-  bindkey "^[[1;5C" forward-word       # Ctrl+Right
-  bindkey "^[[1;5D" backward-word      # Ctrl+Left
-  bindkey "^[[1;5A" up-line-or-history # Ctrl+Up
   bindkey "^[[1;5B" down-line-or-history # Ctrl+Down
 fi
+
+# ==============================================================================
+# 🚀 终极终端键位适配中心 (必须放在文件最底层)
+# ==============================================================================
+
+# 1. 强制 Zsh 使用 Emacs 风格键位 (防 nvim 篡改)
+bindkey -e
+
+# 2. 修复基础编辑键 (删除与退格)
+bindkey "^[[3~" delete-char              # Delete (向后删除单个字符)
+bindkey "^[[3;5~" kill-word              # Ctrl + Delete (向后删除整个单词)
+bindkey "^[[3;3~" kill-word              # Alt + Delete (向后删除整个单词)
+
+bindkey '^[^?' backward-kill-word        # Alt + Backspace (向前删除单词)
+bindkey '^[^H' backward-kill-word        # Alt + Backspace (变种)
+bindkey '^H' backward-kill-word          # Ctrl + Backspace (向前删除单词)
+bindkey '^W' backward-kill-word          # Ctrl + Backspace (传统Unix变种)
+
+# 3. 修复 Home 和 End 键
+bindkey "^[[H" beginning-of-line
+bindkey "^[[F" end-of-line
+
+# 4. 修复基础方向键
+bindkey "^[[A" up-line-or-history
+bindkey "^[[B" down-line-or-history
+bindkey "^[[C" forward-char
+bindkey "^[[D" backward-char
+
+# 5. 修复 Ctrl + 左右方向键 (跳过单词)
+bindkey "^[[1;5C" forward-word           # Windows Terminal 标准 Ctrl+Right
+bindkey "^[[1;5D" backward-word          # Windows Terminal 标准 Ctrl+Left
+bindkey "^[O5C"   forward-word           # Tmux 变种 Ctrl+Right
+bindkey "^[O5D"   backward-word          # Tmux 变种 Ctrl+Left
+bindkey "^[Oc"    forward-word           # rxvt 变种 Ctrl+Right
+bindkey "^[Od"    backward-word          # rxvt 变种 Ctrl+Left
+
+# 6. 修复 Alt + 左右方向键 (跳过单词)
+bindkey "^[[1;3C" forward-word           # 标准 Alt+Right
+bindkey "^[[1;3D" backward-word          # 标准 Alt+Left
+bindkey "^[^[[C"  forward-word           # Git Bash 嵌套 Alt+Right (输出C的元凶)
+bindkey "^[^[[D"  backward-word          # Git Bash 嵌套 Alt+Left (输出D的元凶)
 ZSHRC_EOF2
 }
 
