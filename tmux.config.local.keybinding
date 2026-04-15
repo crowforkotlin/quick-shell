@@ -1,0 +1,89 @@
+# ==============================================================================
+# Tmux 终极体验配置 (全自动化、无 Prefix 快捷键版)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. 基础全局配置
+# ------------------------------------------------------------------------------
+set-window-option -g xterm-keys on
+set-option -g status-keys emacs
+set-window-option -g mode-keys vi
+set -g mouse on               # 开启鼠标支持
+set -g base-index 1           # 窗口编号从 1 开始 (符合键盘布局)
+set -g pane-base-index 1      # 面板编号从 1 开始
+set -g renumber-windows on    # 关闭窗口后自动重新编号
+set -s escape-time 0          # 解决 Vim 模式切换延迟
+
+# ------------------------------------------------------------------------------
+# 2. 极速分屏 (无 Prefix 直接触发)
+#    改用 Alt+\ 和 Alt+- 避免与终端字体快捷键冲突
+# ------------------------------------------------------------------------------
+unbind %
+unbind '"'
+bind-key -n M-\\ split-window -h -c "#{pane_current_path}"  # Alt + \ 左右分屏
+bind-key -n M-- split-window -v -c "#{pane_current_path}"   # Alt + - 上下分屏
+
+# ------------------------------------------------------------------------------
+# 3. 无前缀切换分屏 (Direct Pane Navigation)
+#    直接按 Ctrl + h/j/k/l 切换当前 Tab 里的分屏
+# ------------------------------------------------------------------------------
+bind-key -n C-h select-pane -L
+bind-key -n C-j select-pane -D
+bind-key -n C-k select-pane -U
+bind-key -n C-l select-pane -R
+
+# ------------------------------------------------------------------------------
+# 4. 无前缀切换 Tab
+#    Alt + 数字 切换不同的 Tab
+# ------------------------------------------------------------------------------
+bind-key -n M-1 select-window -t 1
+bind-key -n M-2 select-window -t 2
+bind-key -n M-3 select-window -t 3
+bind-key -n M-4 select-window -t 4
+bind-key -n M-5 select-window -t 5
+bind-key -n M-6 select-window -t 6
+bind-key -n M-7 select-window -t 7
+bind-key -n M-8 select-window -t 8
+bind-key -n M-9 select-window -t 9
+
+# ------------------------------------------------------------------------------
+# 5. 新建 / 关闭 Tab
+# ------------------------------------------------------------------------------
+bind-key -n C-t new-window -c "#{pane_current_path}"   # Ctrl + t 新建 Tab
+bind-key -n C-w kill-pane                               # Ctrl + w 关闭当前分屏
+
+# ------------------------------------------------------------------------------
+# 6. 状态栏视觉增强
+# ------------------------------------------------------------------------------
+set -g status-style bg=default,fg=white
+set -g status-left-length 20
+set -g status-left '#[fg=green,bold] #S ⮕  '
+set -g status-right '#[fg=yellow] %H:%M '
+
+set-window-option -g window-status-current-format '#[fg=white,bg=blue,bold] #I:#W '
+set-window-option -g window-status-format '#[fg=brightblack,bg=default] #I:#W '
+
+# ------------------------------------------------------------------------------
+# 7. 配置重载快捷键
+# ------------------------------------------------------------------------------
+bind r source-file ~/.tmux.conf \; display-message "Tmux 配置已重载！"
+
+# --- 终端分屏与标签页快捷键配置 ---
+
+# 左右分屏 (Vertical Split): 使用 Alt + \ 避开终端字体冲突，\ 视觉上类似垂直线
+# Alt + \
+
+# 上下分屏 (Horizontal Split): 使用 Alt + - 避开终端字体冲突，- 视觉上类似水平线
+# Alt + -
+
+# 切换分屏 (Pane Navigation): 使用 Ctrl + h/j/k/l 进行方向导航 (左/下/上/右)
+# Ctrl + h, Ctrl + j, Ctrl + k, Ctrl + l
+
+# 切换 Tab (Switch Tabs): 使用 Alt + 1~9 快速跳转至对应序号的标签页
+# Alt + 1, Alt + 2, ..., Alt + 9
+
+# 新建 Tab (New Tab): 使用 Ctrl + t 创建新标签页，符合主流浏览器习惯
+# Ctrl + t
+
+# 关闭分屏 (Close Pane): 使用 Ctrl + w 关闭当前活动窗口或分屏
+# Ctrl + w
