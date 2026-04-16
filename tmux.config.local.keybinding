@@ -67,23 +67,3 @@ set-window-option -g window-status-format '#[fg=brightblack,bg=default] #I:#W '
 # 7. 配置重载快捷键
 # ------------------------------------------------------------------------------
 bind r source-file ~/.tmux.conf \; display-message "Tmux 配置已重载！"
-
-# --- 终端分屏与标签页快捷键配置 ---
-
-# 左右分屏 (Vertical Split): 使用 Alt + \ 避开终端字体冲突，\ 视觉上类似垂直线
-# Alt + \
-
-# 上下分屏 (Horizontal Split): 使用 Alt + - 避开终端字体冲突，- 视觉上类似水平线
-# Alt + -
-
-# 切换分屏 (Pane Navigation): 使用 Ctrl + h/j/k/l 进行方向导航 (左/下/上/右)
-# Ctrl + h, Ctrl + j, Ctrl + k, Ctrl + l
-
-# 切换 Tab (Switch Tabs): 使用 Alt + 1~9 快速跳转至对应序号的标签页
-# Alt + 1, Alt + 2, ..., Alt + 9
-
-# 新建 Tab (New Tab): 使用 Ctrl + t 创建新标签页，符合主流浏览器习惯
-# Ctrl + t
-
-# 关闭分屏 (Close Pane): 使用 Ctrl + w 关闭当前活动窗口或分屏
-# Ctrl + w
