@@ -80,7 +80,7 @@ zinit light junegunn/fzf
 # Completion System
 # ==============================================================================
 autoload -Uz compinit
-compinit
+compinit -u
 
 # Replay all cached completions (zinit optimization)
 zinit cdreplay -q

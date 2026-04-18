@@ -1,0 +1,89 @@
+# ghostty 终端config需要j配置 macos-option-as-alt = true, 否则无法使用jj
+# ==============================================================================
+# Tmux 终极体验配置 — macOS 优化版
+# 依赖：Ghostty（macos-option-as-alt = true）
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. 基础全局配置
+# ------------------------------------------------------------------------------
+set-window-option -g xterm-keys on
+set-option -g status-keys emacs
+set-window-option -g mode-keys vi
+set -g mouse on
+set -g base-index 1
+set -g pane-base-index 1
+set -g renumber-windows on
+set -s escape-time 0
+set -g focus-events on           # 让 Vim/Neovim 感知焦点切换（macOS 常用）
+set -g default-shell /bin/zsh   # macOS Ventura+ 默认 Shell
+
+# ------------------------------------------------------------------------------
+# 2. 真彩色 / 256 色支持（macOS 必须显式配置）
+# ------------------------------------------------------------------------------
+set -g default-terminal "tmux-256color"
+set -ga terminal-overrides ",xterm-256color:Tc"
+set -ga terminal-overrides ",ghostty:Tc"
+
+# ------------------------------------------------------------------------------
+# 3. macOS 剪贴板集成（复制即入系统剪贴板）
+# ------------------------------------------------------------------------------
+set -g set-clipboard on
+bind-key -T copy-mode-vi y send-keys -X copy-pipe-and-cancel "pbcopy"
+bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
+# 从系统剪贴板粘贴
+bind-key -n M-v run "pbpaste | tmux load-buffer - && tmux paste-buffer"  # Option + v 粘贴
+
+# ------------------------------------------------------------------------------
+# 4. 极速分屏
+# ------------------------------------------------------------------------------
+unbind %
+unbind '"'
+bind-key -n M-\\ split-window -h -c "#{pane_current_path}"  # Option + \ 左右分屏
+bind-key -n M-- split-window -v -c "#{pane_current_path}"   # Option + - 上下分屏
+
+# ------------------------------------------------------------------------------
+# 5. 无前缀切换面板
+# ------------------------------------------------------------------------------
+bind-key -n M-h select-pane -L  # Option + h 切换到左侧面板
+bind-key -n M-j select-pane -D  # Option + j 切换到下方面板
+bind-key -n M-k select-pane -U  # Option + k 切换到上方面板
+bind-key -n M-l select-pane -R  # Option + l 切换到右侧面板
+
+# ------------------------------------------------------------------------------
+# 6. 面板大小调整
+# ------------------------------------------------------------------------------
+bind-key -n M-H resize-pane -L 3  # Option + Shift + h 向左扩展
+bind-key -n M-J resize-pane -D 3  # Option + Shift + j 向下扩展
+bind-key -n M-K resize-pane -U 3  # Option + Shift + k 向上扩展
+bind-key -n M-L resize-pane -R 3  # Option + Shift + l 向右扩展
+
+# ------------------------------------------------------------------------------
+# 7. 无前缀切换 Tab
+# ------------------------------------------------------------------------------
+bind-key -n M-1 select-window -t 1  # Option + 1
+bind-key -n M-2 select-window -t 2  # Option + 2
+bind-key -n M-3 select-window -t 3  # Option + 3
+bind-key -n M-4 select-window -t 4  # Option + 4
+bind-key -n M-5 select-window -t 5  # Option + 5
+bind-key -n M-6 select-window -t 6  # Option + 6
+bind-key -n M-7 select-window -t 7  # Option + 7
+bind-key -n M-8 select-window -t 8  # Option + 8
+bind-key -n M-9 select-window -t 9  # Option + 9
+
+# ------------------------------------------------------------------------------
+# 8. 新建 / 关闭 Tab
+# ------------------------------------------------------------------------------
+bind-key -n M-t new-window -c "#{pane_current_path}"  # Option + t 新建 Tab
+bind-key -n M-w kill-pane                              # Option + w 关闭当前面板
+
+# ------------------------------------------------------------------------------
+# 9. 窗口重命名（关闭自动重命名，防止手动改名被覆盖）
+# ------------------------------------------------------------------------------
+set-window-option -g automatic-rename off
+bind-key -n M-r command-prompt -I "#W" "rename-window '%%'"  # Option + r 重命名当前 Tab
+
+# ------------------------------------------------------------------------------
+# 10. 配置重载
+# ------------------------------------------------------------------------------
+bind r source-file ~/.config/tmux/tmux.conf \; display-message "配置已重载！"
