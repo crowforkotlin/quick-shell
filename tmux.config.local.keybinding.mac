@@ -1,4 +1,3 @@
-# ghostty 终端config需要j配置 macos-option-as-alt = true, 否则无法使用jj
 # ==============================================================================
 # Tmux 终极体验配置 — macOS 优化版
 # 依赖：Ghostty（macos-option-as-alt = true）
@@ -23,7 +22,9 @@ set -g default-shell /bin/zsh   # macOS Ventura+ 默认 Shell
 # ------------------------------------------------------------------------------
 set -g default-terminal "tmux-256color"
 set -ga terminal-overrides ",xterm-256color:Tc"
+set -ga terminal-overrides ",xterm-ghostty:Tc:Ss=\E[%p1%d q:Se=\E[2 q"
 set -ga terminal-overrides ",ghostty:Tc"
+set -ga terminal-overrides ",ghostty:Ss=\E[%p1%d q:Se=\E[2 q"
 
 # ------------------------------------------------------------------------------
 # 3. macOS 剪贴板集成（复制即入系统剪贴板）
