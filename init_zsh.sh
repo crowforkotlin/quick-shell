@@ -38,12 +38,6 @@ fi
 source "${ZINIT_HOME}/zinit.zsh"
 
 # ==============================================================================
-# Theme: Powerlevel10k
-# ==============================================================================
-zinit ice depth=1
-zinit light romkatv/powerlevel10k
-
-# ==============================================================================
 # Plugins
 # ==============================================================================
 # Syntax Highlighting (must be loaded last or near last)
@@ -181,6 +175,8 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
   bindkey "^[^[[C"  forward-word           # Git Bash 嵌套 Alt+Right (输出C的元凶)
   bindkey "^[^[[D"  backward-word          # Git Bash 嵌套 Alt+Left (输出D的元凶)
 fi
+
+eval "$(starship init zsh)"
 ZSHRC_EOF2
 }
 
@@ -256,6 +252,7 @@ TOTAL_STEPS=5
 PACKAGES_COMMON="zsh curl git"
 # Extended Packages (lsd, bat, fzf)
 PACKAGES_EXT="lsd bat fzf"
+STARSHIP_PACKAGE="starship"
 
 # --- 2. Environment Detection ---
 
@@ -286,6 +283,7 @@ detect_env() {
       UPDATE_CMD="pacman -Sy"
       # Windows specific packages
       PACKAGES_EXT="mingw-w64-ucrt-x86_64-lsd mingw-w64-ucrt-x86_64-bat mingw-w64-ucrt-x86_64-fzf"
+      STARSHIP_PACKAGE="mingw-w64-ucrt-x86_64-starship"
     else
       log_error "Pacman package manager not found!"
       log_warn "This script relies on MSYS2 environment. Please ensure you are using full MSYS2 or Git Bash with Pacman."
@@ -370,6 +368,17 @@ install_pkgs() {
   log_info "Installing packages: ${WHITE}$PACKAGES_COMMON $PACKAGES_EXT${NC}"
   # Windows pacman might take time
   eval "$SUDO $INSTALL_CMD $PACKAGES_COMMON $PACKAGES_EXT"
+
+  if ! command -v starship >/dev/null 2>&1; then
+    log_info "Installing starship prompt..."
+    if ! eval "$SUDO $INSTALL_CMD $STARSHIP_PACKAGE" >/dev/null 2>&1; then
+      log_warn "Package manager install for starship failed, falling back to official installer."
+      if ! curl -fsSL https://starship.rs/install.sh | sh -s -- -y >/dev/null; then
+        log_error "Failed to install starship."
+        exit 1
+      fi
+    fi
+  fi
 
   # Refresh hash
   hash -r 2>/dev/null
@@ -472,7 +481,6 @@ install_plugins() {
   ZINIT_PLUGINS="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins"
 
   echo "Processing Plugin List..."
-  manage_plugin "Powerlevel10k" "https://github.com/romkatv/powerlevel10k.git" "${ZINIT_PLUGINS}/romkatv---powerlevel10k"
   manage_plugin "Syntax Highlighting" "https://github.com/zsh-users/zsh-syntax-highlighting" "${ZINIT_PLUGINS}/zsh-users---zsh-syntax-highlighting"
   manage_plugin "Auto Suggestions" "https://github.com/zsh-users/zsh-autosuggestions" "${ZINIT_PLUGINS}/zsh-users---zsh-autosuggestions"
   manage_plugin "zsh-z" "https://github.com/agkozak/zsh-z" "${ZINIT_PLUGINS}/agkozak---zsh-z"
