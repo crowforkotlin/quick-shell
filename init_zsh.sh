@@ -30,54 +30,60 @@ fi
 ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
 
 # Auto-install zinit if missing
-if [ ! -d "$ZINIT_HOME" ]; then
+if [ ! -f "${ZINIT_HOME}/zinit.zsh" ]; then
     mkdir -p "$(dirname $ZINIT_HOME)"
-    git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
+    if ! git clone --depth=1 https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME" >/dev/null 2>&1; then
+        echo "[quick-shell] Warning: failed to install zinit; skipping zinit plugins." >&2
+    fi
 fi
 
-source "${ZINIT_HOME}/zinit.zsh"
+if [ -f "${ZINIT_HOME}/zinit.zsh" ]; then
+    source "${ZINIT_HOME}/zinit.zsh"
 
-# ==============================================================================
-# Plugins
-# ==============================================================================
-# Syntax Highlighting (must be loaded last or near last)
-# Only apply this block in Windows environments (Git Bash / MSYS2)
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-    
-    # Disable syntax highlighting in VS Code integrated terminal 
-    # to prevent input lag and UI stuttering on Windows.
-    if [[ "$TERM_PROGRAM" != "vscode" ]]; then
-        zinit light zsh-users/zsh-syntax-highlighting
+    # ==============================================================================
+    # Plugins
+    # ==============================================================================
+    # Syntax Highlighting (must be loaded last or near last)
+    # Only apply this block in Windows environments (Git Bash / MSYS2)
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        
+        # Disable syntax highlighting in VS Code integrated terminal 
+        # to prevent input lag and UI stuttering on Windows.
+        if [[ "$TERM_PROGRAM" != "vscode" ]]; then
+            zinit light zsh-users/zsh-syntax-highlighting
+        fi
+
     fi
 
+    # Auto Suggestions
+    zinit light zsh-users/zsh-autosuggestions
+
+    # z - jump to frecent directories
+    zinit light agkozak/zsh-z
+
+    # fzf tab completion
+    zinit light Aloxaf/fzf-tab
+
+    # OMZ snippets (git aliases, extract, etc.)
+    zinit snippet OMZP::git
+    zinit snippet OMZP::extract
+
+    # fzf key bindings (Ctrl+R / Ctrl+T / Alt+C)
+    # wait'0' 异步加载，避免阻塞 shell 启动
+    zinit ice lucid wait'0' multisrc'shell/key-bindings.zsh shell/completion.zsh'
+    zinit light junegunn/fzf
+
+    # ==============================================================================
+    # Completion System
+    # ==============================================================================
+    autoload -Uz compinit
+    compinit -u
+
+    # Replay all cached completions (zinit optimization)
+    zinit cdreplay -q
+else
+    echo "[quick-shell] Warning: zinit is unavailable; shell started without zinit plugins." >&2
 fi
-
-# Auto Suggestions
-zinit light zsh-users/zsh-autosuggestions
-
-# z - jump to frecent directories
-zinit light agkozak/zsh-z
-
-# fzf tab completion
-zinit light Aloxaf/fzf-tab
-
-# OMZ snippets (git aliases, extract, etc.)
-zinit snippet OMZP::git
-zinit snippet OMZP::extract
-
-# fzf key bindings (Ctrl+R / Ctrl+T / Alt+C)
-# wait'0' 异步加载，避免阻塞 instant prompt
-zinit ice lucid wait'0' multisrc'shell/key-bindings.zsh shell/completion.zsh'
-zinit light junegunn/fzf
-
-# ==============================================================================
-# Completion System
-# ==============================================================================
-autoload -Uz compinit
-compinit -u
-
-# Replay all cached completions (zinit optimization)
-zinit cdreplay -q
 
 # 解决 Java/Gradle 等输出乱码问题
 export JAVA_TOOL_OPTIONS="-Duser.language=en -Duser.country=US"
@@ -176,7 +182,11 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
   bindkey "^[^[[D"  backward-word          # Git Bash 嵌套 Alt+Left (输出D的元凶)
 fi
 
-eval "$(starship init zsh)"
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init zsh)"
+else
+  echo "[quick-shell] Warning: starship is unavailable; prompt theme not loaded." >&2
+fi
 ZSHRC_EOF2
 }
 
@@ -238,6 +248,25 @@ print_step() {
   printf "${CYAN}┌──────────────────────────────────────────────────────────────┐${NC}\n"
   printf "${CYAN}│ 🚀 STEP %d/%d : %-43s │${NC}\n" "$1" "$2" "$3"
   printf "${CYAN}└──────────────────────────────────────────────────────────────┘${NC}\n"
+}
+
+disable_root_local_proxy() {
+  local proxy_var proxy_value
+
+  if [ "$(id -u)" -ne 0 ] || [ "${QUICK_SHELL_KEEP_PROXY:-0}" = "1" ]; then
+    return 0
+  fi
+
+  for proxy_var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; do
+    proxy_value="${!proxy_var}"
+    case "$proxy_value" in
+    http://127.0.0.1:* | https://127.0.0.1:* | socks5://127.0.0.1:* | http://localhost:* | https://localhost:* | socks5://localhost:*)
+      log_warn "Detected inherited localhost proxy in $proxy_var. Disabling proxy for this root session."
+      unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY
+      return 0
+      ;;
+    esac
+  done
 }
 
 # Variable Initialization
@@ -350,6 +379,10 @@ detect_env() {
     ;;
   esac
 
+  if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+  fi
+
   log_info "Platform Detected : ${MAGENTA}${OS_TYPE}${NC}"
   log_info "Target Directory  : ${WHITE}${TARGET_DIR}${NC}"
 }
@@ -425,8 +458,8 @@ config_zshrc() {
 
   if [ "$CLEAN_INSTALL" = true ]; then
     log_info "Cleaning up old configurations..."
-    # Remove old .zshrc and zinit data directory
-    rm -rf "$HOME/.zshrc" "${XDG_DATA_HOME:-$HOME/.local/share}/zinit"
+    # Remove old .zshrc, zinit data directory and legacy Powerlevel10k config
+    rm -rf "$HOME/.zshrc" "$HOME/.p10k.zsh" "${XDG_DATA_HOME:-$HOME/.local/share}/zinit"
 
     log_info "Creating Quick Shell directory..."
     mkdir -p "$TARGET_DIR"
@@ -447,13 +480,17 @@ config_zshrc() {
 install_plugins() {
   print_step 4 $TOTAL_STEPS "Plugin Deployment"
 
+  local plugin_failures=0
   ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
 
   # Install Zinit Core
   if [ ! -d "$ZINIT_HOME" ]; then
     log_info "Installing Zinit Plugin Manager..."
     mkdir -p "$(dirname "$ZINIT_HOME")"
-    git clone --depth=1 https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME" -q
+    if ! git clone --depth=1 https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME" -q; then
+      log_error "Failed to install Zinit Plugin Manager."
+      return 1
+    fi
   fi
 
   # Plugin Manager
@@ -466,14 +503,23 @@ install_plugins() {
       if [ "$FORCE_RECLONE" = true ] || [ "$CLEAN_INSTALL" = true ]; then
         printf "  📦 %-25s : ${YELLOW}Reinstalling...${NC}\n" "$name"
         rm -rf "$path"
-        git clone --depth=1 "$url" "$path" -q
+        if ! git clone --depth=1 "$url" "$path" -q; then
+          echo "    ❌ Reinstall Failed"
+          return 1
+        fi
       else
         printf "  📦 %-25s : ${BLUE}Updating...${NC}\n" "$name"
-        git -C "$path" pull -q >/dev/null 2>&1 || echo "    ❌ Update Failed (Check Network)"
+        if ! git -C "$path" pull -q >/dev/null 2>&1; then
+          echo "    ❌ Update Failed (Check Network)"
+          return 1
+        fi
       fi
     else
       printf "  📦 %-25s : ${GREEN}Installing...${NC}\n" "$name"
-      git clone --depth=1 "$url" "$path" -q
+      if ! git clone --depth=1 "$url" "$path" -q; then
+        echo "    ❌ Install Failed"
+        return 1
+      fi
     fi
   }
 
@@ -481,13 +527,19 @@ install_plugins() {
   ZINIT_PLUGINS="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/plugins"
 
   echo "Processing Plugin List..."
-  manage_plugin "Syntax Highlighting" "https://github.com/zsh-users/zsh-syntax-highlighting" "${ZINIT_PLUGINS}/zsh-users---zsh-syntax-highlighting"
-  manage_plugin "Auto Suggestions" "https://github.com/zsh-users/zsh-autosuggestions" "${ZINIT_PLUGINS}/zsh-users---zsh-autosuggestions"
-  manage_plugin "zsh-z" "https://github.com/agkozak/zsh-z" "${ZINIT_PLUGINS}/agkozak---zsh-z"
-  manage_plugin "fzf-tab" "https://github.com/Aloxaf/fzf-tab" "${ZINIT_PLUGINS}/Aloxaf---fzf-tab"
-  manage_plugin "fzf" "https://github.com/junegunn/fzf" "${ZINIT_PLUGINS}/junegunn---fzf"
+  manage_plugin "Syntax Highlighting" "https://github.com/zsh-users/zsh-syntax-highlighting" "${ZINIT_PLUGINS}/zsh-users---zsh-syntax-highlighting" || plugin_failures=$((plugin_failures + 1))
+  manage_plugin "Auto Suggestions" "https://github.com/zsh-users/zsh-autosuggestions" "${ZINIT_PLUGINS}/zsh-users---zsh-autosuggestions" || plugin_failures=$((plugin_failures + 1))
+  manage_plugin "zsh-z" "https://github.com/agkozak/zsh-z" "${ZINIT_PLUGINS}/agkozak---zsh-z" || plugin_failures=$((plugin_failures + 1))
+  manage_plugin "fzf-tab" "https://github.com/Aloxaf/fzf-tab" "${ZINIT_PLUGINS}/Aloxaf---fzf-tab" || plugin_failures=$((plugin_failures + 1))
+  manage_plugin "fzf" "https://github.com/junegunn/fzf" "${ZINIT_PLUGINS}/junegunn---fzf" || plugin_failures=$((plugin_failures + 1))
+
+  if [ "$plugin_failures" -gt 0 ]; then
+    log_error "Plugin deployment finished with ${plugin_failures} failure(s). Check network or proxy settings and rerun."
+    return 1
+  fi
 
   log_success "All plugins deployed successfully."
+  return 0
 }
 
 # --- 6. Set Default Shell ---
@@ -546,38 +598,57 @@ fi
     # Linux / Mac / Android Logic
     if [ "$OS_TYPE" = "Android" ]; then
       log_info "Termux environment detected. Switching shell..."
-      chsh -s zsh
+      if ! chsh -s zsh; then
+        log_warn "Auto-switch failed. Please run manually after fixing your shell config."
+        return 1
+      fi
     else
       log_info "Attempting to switch shell using 'chsh'..."
       ZSH_PATH=$(command -v zsh 2>/dev/null)
       if [ -n "$ZSH_PATH" ]; then
-        chsh -s "$ZSH_PATH" || log_warn "Auto-switch failed. Please run manually: chsh -s $ZSH_PATH"
+        if ! chsh -s "$ZSH_PATH"; then
+          log_warn "Auto-switch failed. Please run manually: chsh -s $ZSH_PATH"
+          return 1
+        fi
       else
         log_error "Zsh path not found. Skipping default shell setup."
+        return 1
       fi
     fi
   fi
+
+  return 0
 }
 
 # --- Main Entry Point ---
 
 main() {
+  local plugin_status=0
+  local shell_status=0
+
   # Clear screen
   printf "${MAGENTA}====================================================${NC}\n"
   printf "${MAGENTA}   ✨ Zsh + Zinit + QuickShell Setup Script ✨     ${NC}\n"
   printf "${MAGENTA}====================================================${NC}\n"
 
   detect_env
+  disable_root_local_proxy
   install_pkgs
   config_zshrc
-  install_plugins
-  set_default_shell
+  install_plugins || plugin_status=$?
+  set_default_shell || shell_status=$?
 
   echo ""
-  log_success "🎉 All tasks completed successfully!"
+  if [ "$plugin_status" -eq 0 ] && [ "$shell_status" -eq 0 ]; then
+    log_success "🎉 All tasks completed successfully!"
+  else
+    log_warn "Setup completed with warnings."
+  fi
 
   if [ "$OS_TYPE" = "Windows" ]; then
     log_info "Please restart your Git Bash terminal to apply changes."
+  elif [ "$plugin_status" -ne 0 ]; then
+    log_warn "Skipping automatic Zsh launch because plugin setup failed."
   else
     log_info "Entering Zsh now..."
     exec zsh -l
