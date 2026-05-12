@@ -461,8 +461,10 @@ config_zshrc() {
     # Remove old .zshrc, zinit data directory and legacy Powerlevel10k config
     rm -rf "$HOME/.zshrc" "$HOME/.p10k.zsh" "${XDG_DATA_HOME:-$HOME/.local/share}/zinit"
 
-    log_info "Creating Quick Shell directory..."
-    mkdir -p "$TARGET_DIR"
+    if [ "$OS_TYPE" = "Android" ]; then
+      log_info "Creating Quick Shell directory..."
+      mkdir -p "$TARGET_DIR"
+    fi
 
     log_info "Generating new ~/.zshrc ..."
 
