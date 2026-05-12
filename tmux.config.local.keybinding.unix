@@ -76,7 +76,7 @@ bind-key -n M-9 select-window -t 9  # Option + 9
 # 8. 新建 / 关闭 Tab
 # ------------------------------------------------------------------------------
 bind-key -n M-t new-window -c "#{pane_current_path}"  # Option + t 新建 Tab
-bind-key -n M-w kill-pane                              # Option + w 关闭当前面板
+bind-key -n C-w kill-pane                              # Option + w 关闭当前面板
 
 # ------------------------------------------------------------------------------
 # 9. 窗口重命名（关闭自动重命名，防止手动改名被覆盖）
