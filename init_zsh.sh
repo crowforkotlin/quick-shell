@@ -186,6 +186,30 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
   bindkey "^[^[[C"  forward-word           # Git Bash 嵌套 Alt+Right (输出C的元凶)
   bindkey "^[^[[D"  backward-word          # Git Bash 嵌套 Alt+Left (输出D的元凶)
 fi
+# ------------------
+
+# alias sys-update='sudo pacman -Syu --noconfirm && yay -Sua --noconfirm && paru -Sua --noconfirm'
+# alias aur-clean='sudo pacman -Scc --noconfirm && yay -Scc --noconfirm && paru -Scc --noconfirm'
+
+source /usr/share/nvm/init-nvm.sh
+
+export JENV_ROOT="$HOME/.jenv"
+export ZVM_INSTALL="$HOME/.zvm/self"
+
+# yay -S gvm-bin
+PATH_ENTRIES=(
+  "$HOME/.gvm/bin"
+  "$JENV_ROOT/bin"
+  "$HOME/.zvm/bin"
+  "$ZVM_INSTALL"
+  "$PATH"
+)
+
+export PATH="$(IFS=:; echo "${PATH_ENTRIES[*]}")"
+
+eval "$(jenv init -)"
+
+export JAVA_TOOL_OPTIONS="-XX:-HeapDumpOnOutOfMemoryError"
 ZSHRC_EOF2
 
   get_prompt_init_block
