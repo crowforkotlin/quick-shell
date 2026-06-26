@@ -117,7 +117,7 @@ ZSHRC_TARGET
 lt(){ d=10; t="."; for a in "$@"; do [[ "$a" =~ ^[0-9]+$ ]] && d="$a" || { [[ -e "$a" ]] && t="$a"; }; done; lsd --tree --depth "$d" --blocks name "$t"; }
 cdw(){ t=$(which "$1" 2>/dev/null); [[ -n "$t" ]] && { pushd "$(dirname "$t")" > /dev/null; } || echo "找不到程序: $1"; }
 
-gitdc(){ o=$(git -p diff HEAD;echo "---";git status); echo "$o" | { pbcopy || clip.exe || xclip -sel c || xsel -b; } && echo "✅ Copied ($(echo "$o" | wc -l) lines)"; }
+gitdc(){ o=$(git -p diff HEAD;echo "---";git status); echo "$o" | { wl-copy 2>/dev/null || pbcopy || clip.exe || xclip -sel c || xsel -b; } && echo "✅ Copied ($(echo "$o" | wc -l) lines)"; }
 gitdf(){ o=$(git -p diff HEAD;echo "---";git status); echo "$o" > "${1:-commit_message.txt}" && echo "✅ Saved to ${1:-commit_message.txt} ($(echo "$o" | wc -l) lines)"; }
 stowlink() { [ -z "$2" ] && echo "Usage: stowlink <dir> <pkg>" || (mkdir -p "$1" && stow -t "$1" "$2"); }
 stowlink-auto() { [ -z "$2" ] && echo "Usage: stowlink-auto <parent_path> <pkg>" || (T="${1%/}/$2" && mkdir -p "$T" && stow -t "$T" "$2"); }
