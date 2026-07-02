@@ -140,10 +140,10 @@ setopt SHARE_HISTORY         # Share history across all open sessions
 
 
 # --- Aliases ---
-alias ls=lsd
-alias ll='lsd -l'
-alias la='lsd -a'
-alias batall='bat --paging=never'
+alias ls='command -v lsd &>/dev/null && lsd || ls'
+alias ll='command -v lsd &>/dev/null && lsd -l || ls -l'
+alias la='command -v lsd &>/dev/null && lsd -a || ls -a'
+alias batall='command -v bat &>/dev/null && bat --paging=never || cat'
 alias gitfetch='git -c log.showSignature=false -c core.quotepath=false fetch origin --recurse-submodules=no --progress --prune'
 
 # Fix Ctrl+Arrow in Git Bash / Windows Terminal
@@ -198,6 +198,7 @@ export ZVM_INSTALL="$HOME/.zvm/self"
 
 # yay -S gvm-bin
 PATH_ENTRIES=(
+  "$HOME/.local/bin"
   "$HOME/.gvm/bin"
   "$JENV_ROOT/bin"
   "$HOME/.zvm/bin"
@@ -250,7 +251,64 @@ PROMPT_INIT_EOF
     cat <<'PROMPT_INIT_EOF'
 # >>> quick-shell prompt init >>>
 if command -v starship >/dev/null 2>&1; then
-  eval "$(starship init zsh)"
+  _starship_bin="$(command -v starship)"
+
+  # Source init.zsh if available (functions/hooks), otherwise define manually
+  _starship_init="${_starship_bin:h}/init.zsh"
+  if [ -f "$_starship_init" ]; then
+    source "$_starship_init"
+  else
+    # --- Manual init (replaces starship init zsh, avoids quoted-path issues on Windows) ---
+    zmodload zsh/parameter
+    if [[ $ZSH_VERSION == ([1-4]*) ]]; then
+      __starship_get_time() { STARSHIP_CAPTURED_TIME=$("${_starship_bin}" time); }
+    else
+      zmodload zsh/datetime zsh/mathfunc
+      __starship_get_time() { (( STARSHIP_CAPTURED_TIME = int(rint(EPOCHREALTIME * 1000)) )); }
+    fi
+    prompt_starship_precmd() {
+      STARSHIP_CMD_STATUS=$? STARSHIP_PIPE_STATUS=(${pipestatus[@]})
+      if (( ${+STARSHIP_START_TIME} )); then
+        __starship_get_time && STARSHIP_DURATION=$(( STARSHIP_CAPTURED_TIME - STARSHIP_START_TIME ))
+        unset STARSHIP_START_TIME
+      else
+        unset STARSHIP_DURATION STARSHIP_CMD_STATUS STARSHIP_PIPE_STATUS
+      fi
+      STARSHIP_JOBS_COUNT="${#jobstates[*]}"
+    }
+    prompt_starship_preexec() {
+      __starship_get_time && STARSHIP_START_TIME=$STARSHIP_CAPTURED_TIME
+    }
+    autoload -Uz add-zsh-hook
+    add-zsh-hook precmd prompt_starship_precmd
+    add-zsh-hook preexec prompt_starship_preexec
+    starship_zle-keymap-select() { zle reset-prompt; }
+    if [[ -v widgets[zle-keymap-select] ]]; then
+      __starship_preserved_zle_keymap_select=${widgets[zle-keymap-select]#user:}
+    fi
+    if [[ -z ${__starship_preserved_zle_keymap_select:-} ]]; then
+      zle -N zle-keymap-select starship_zle-keymap-select
+    else
+      starship_zle-keymap-select-wrapped() {
+        $__starship_preserved_zle_keymap_select "$@"
+        starship_zle-keymap-select "$@"
+      }
+      zle -N zle-keymap-select starship_zle-keymap-select-wrapped
+    fi
+    export STARSHIP_SHELL="zsh"
+    STARSHIP_SESSION_KEY="$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM"
+    STARSHIP_SESSION_KEY="${STARSHIP_SESSION_KEY}0000000000000000"
+    export STARSHIP_SESSION_KEY=${STARSHIP_SESSION_KEY:0:16}
+    VIRTUAL_ENV_DISABLE_PROMPT=1
+    # --- End manual init ---
+  fi
+  unset _starship_init
+
+  # PROMPT vars: use 'path' quoting inside $() — safe even when path contains spaces
+  PROMPT="\$('${_starship_bin}' prompt --terminal-width=\"\$COLUMNS\" --keymap=\"\${KEYMAP:-}\" --status=\"\${STARSHIP_CMD_STATUS:-}\" --pipestatus=\"\${STARSHIP_PIPE_STATUS[*]:-}\" --cmd-duration=\"\${STARSHIP_DURATION:-}\" --jobs=\"\$STARSHIP_JOBS_COUNT\")"
+  RPROMPT="\$('${_starship_bin}' prompt --right --terminal-width=\"\$COLUMNS\" --keymap=\"\${KEYMAP:-}\" --status=\"\${STARSHIP_CMD_STATUS:-}\" --pipestatus=\"\${STARSHIP_PIPE_STATUS[*]:-}\" --cmd-duration=\"\${STARSHIP_DURATION:-}\" --jobs=\"\$STARSHIP_JOBS_COUNT\")"
+  PROMPT2="\$('${_starship_bin}' prompt --continuation)"
+  setopt promptsubst
 else
   echo "[quick-shell] Warning: starship is unavailable; prompt theme not loaded." >&2
 fi
@@ -412,15 +470,12 @@ detect_env() {
       log_success "Detected MSYS2/Git Bash (Pacman available)."
       INSTALL_CMD="pacman -S --noconfirm"
       UPDATE_CMD="pacman -Sy"
-      # Windows specific packages
-      PACKAGES_EXT="mingw-w64-ucrt-x86_64-lsd mingw-w64-ucrt-x86_64-bat mingw-w64-ucrt-x86_64-fzf"
-      STARSHIP_PACKAGE="mingw-w64-ucrt-x86_64-starship"
-    else
-      log_error "Pacman package manager not found!"
-      log_warn "This script relies on MSYS2 environment. Please ensure you are using full MSYS2 or Git Bash with Pacman."
-      log_info "Download: https://github.com/msys2/msys2-installer/releases"
-      exit 1
+      # Git Bash pacman repos are limited; ext packages handled individually below
+      PACKAGES_EXT=""
+      STARSHIP_PACKAGE="mingw-w64-x86_64-starship"
     fi
+    # Always add Windows package manager paths to PATH (scoop/choco may install starship etc.)
+    export PATH="$PATH:/c/Users/$USER/scoop/shims:/c/ProgramData/chocolatey/bin:/c/ProgramData/chocolatey/lib/starship/tools:/c/Program Files/starship"
     ;;
 
   *darwin*)
@@ -528,17 +583,125 @@ install_pkgs() {
     log_warn "Repository update returned warnings. Attempting to proceed..."
   fi
 
-  log_info "Installing packages: ${WHITE}$PACKAGES_COMMON $PACKAGES_EXT${NC}"
-  # Windows pacman might take time
-  eval "$SUDO $INSTALL_CMD $PACKAGES_COMMON $PACKAGES_EXT"
+  log_info "Installing packages: ${WHITE}$PACKAGES_COMMON${NC}"
+  eval "$SUDO $INSTALL_CMD $PACKAGES_COMMON"
+
+  # Try optional/extended packages individually (repos may not carry them, especially on Git Bash)
+  local ext_pkgs="$PACKAGES_EXT"
+  if [ "$OS_TYPE" = "Windows" ]; then
+    ext_pkgs="$ext_pkgs mingw-w64-x86_64-lsd mingw-w64-x86_64-bat mingw-w64-x86_64-fzf"
+  fi
+  for opt_pkg in $ext_pkgs; do
+    if ! eval "$SUDO $INSTALL_CMD $opt_pkg" >/dev/null 2>&1; then
+      log_warn "Optional package $opt_pkg not available, skipping."
+    fi
+  done
 
   if [ "$PROMPT_THEME" = "starship" ] && ! command -v starship >/dev/null 2>&1; then
     log_info "Installing starship prompt..."
     if ! eval "$SUDO $INSTALL_CMD $STARSHIP_PACKAGE" >/dev/null 2>&1; then
-      log_warn "Package manager install for starship failed, falling back to official installer."
-      if ! curl -fsSL https://starship.rs/install.sh | sh -s -- -y >/dev/null; then
-        log_error "Failed to install starship."
-        exit 1
+      log_warn "Package manager install for starship failed, trying alternative methods."
+
+      if [ "$OS_TYPE" = "Windows" ]; then
+        # Windows: ensure all package manager paths are in PATH
+        local scoop_shims="$HOME/scoop/shims"
+        local winget_dir="/c/Users/$USER/AppData/Local/Microsoft/WindowsApps"
+        local choco_bin="/c/ProgramData/chocolatey/bin"
+        local starship_choco="/c/Program Files/starship"
+        export PATH="$PATH:$scoop_shims:$winget_dir:$choco_bin:$starship_choco"
+
+        # Check if starship is already installed (e.g., via choco in a previous session)
+        if command -v starship >/dev/null 2>&1 || [ -f "/c/Program Files/starship/starship.exe" ]; then
+          log_success "Starship already installed, skipping."
+          installed=true
+        else
+          installed=false
+        fi
+
+        if [ "$installed" = false ] && command -v scoop >/dev/null 2>&1; then
+          log_info "Installing starship via scoop..."
+          if scoop install starship 2>/dev/null; then
+            installed=true
+          fi
+        fi
+        if [ "$installed" = false ] && command -v choco >/dev/null 2>&1; then
+          log_info "Installing starship via chocolatey..."
+          if choco install starship -y 2>/dev/null; then
+            # choco installs to C:\Program Files\starship\
+            export PATH="$PATH:/c/Program Files/starship"
+            installed=true
+          fi
+        fi
+        if [ "$installed" = false ] && command -v winget.exe >/dev/null 2>&1; then
+          log_info "Installing starship via winget..."
+          if winget.exe install --id Starship.Starship -e --accept-source-agreements --accept-package-agreements 2>/dev/null; then
+            installed=true
+          fi
+        fi
+        if [ "$installed" = false ]; then
+          # Resolve version inside cmd.exe (avoids \r issues in bash)
+          local starship_version
+          starship_version=$(cmd.exe /c "for /f \"tokens=2 delims=/\" %a in ('curl.exe -sIL https://github.com/starship/starship/releases/latest ^| findstr /i location') do @echo %a" 2>/dev/null | tr -d '\r\n ' | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+          if [ -n "$starship_version" ]; then
+            log_info "Resolved starship version: $starship_version"
+            local starship_bin="$HOME/.local/bin"
+            mkdir -p "$starship_bin"
+            local tmp_zip="$HOME/.cache/starship-download.zip"
+            mkdir -p "$HOME/.cache"
+            local dl_url="https://github.com/starship/starship/releases/download/${starship_version}/starship-x86_64-pc-windows-msvc.zip"
+            log_info "Downloading starship $starship_version..."
+
+            local win_zip
+            if command -v cygpath >/dev/null 2>&1; then
+              win_zip=$(cygpath -w "$tmp_zip")
+            else
+              win_zip="$tmp_zip"
+            fi
+
+            if cmd.exe /c "curl.exe -fSL \"$dl_url\" -o \"$win_zip\"" 2>/dev/null; then
+              if [ -f "$tmp_zip" ] && [ -s "$tmp_zip" ]; then
+                # Use Windows native tar.exe to extract (handles zip reliably in Git Bash)
+                local win_bin
+                if command -v cygpath >/dev/null 2>&1; then
+                  win_bin=$(cygpath -w "$starship_bin")
+                else
+                  win_bin="$starship_bin"
+                fi
+                cmd.exe /c "tar.exe -xf \"$win_zip\" -C \"$win_bin\"" 2>/dev/null
+                rm -f "$tmp_zip"
+                if [ -f "$starship_bin/starship.exe" ] || [ -f "$starship_bin/starship" ]; then
+                  installed=true
+                  export PATH="$starship_bin:$PATH"
+                  log_success "Starship installed to $starship_bin"
+                fi
+              fi
+            fi
+          else
+            log_warn "Could not resolve starship version."
+          fi
+        fi
+        if [ "$installed" = false ]; then
+          log_error "Failed to install starship."
+          log_info "Please install manually: choco install starship  (or)  scoop install starship  (or)  winget install Starship.Starship"
+          exit 1
+        fi
+      else
+        # Linux/macOS: use official install.sh with BIN_DIR
+        local starship_bin="$HOME/.local/bin"
+        if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ]; then
+          starship_bin="/usr/local/bin"
+        fi
+        mkdir -p "$starship_bin"
+        log_info "Installing starship to $starship_bin via official installer..."
+        if ! curl -fsSL https://starship.rs/install.sh | BIN_DIR="$starship_bin" sh -s -- -y; then
+          log_error "Failed to install starship."
+          exit 1
+        fi
+        case ":$PATH:" in
+          *":$starship_bin:"*) ;;
+          *) export PATH="$starship_bin:$PATH" ;;
+        esac
       fi
     fi
   fi
@@ -574,7 +737,7 @@ replace_managed_block_in_file() {
   local block_file=$4
   local tmp_file
 
-  tmp_file=$(mktemp "${TMPDIR:-/tmp}/quick-shell-block.XXXXXX")
+  tmp_file=$(qs_mktemp "quick-shell-block")
 
   if ! awk -v begin="$begin_marker" -v end="$end_marker" -v block_file="$block_file" '
     function print_block(   line) {
@@ -621,7 +784,7 @@ insert_block_after_anchor() {
   local block_file=$3
   local tmp_file
 
-  tmp_file=$(mktemp "${TMPDIR:-/tmp}/quick-shell-block.XXXXXX")
+  tmp_file=$(qs_mktemp "quick-shell-block")
 
   if ! awk -v anchor="$anchor" -v block_file="$block_file" '
     function print_block(   line) {
@@ -665,6 +828,19 @@ append_block_from_file() {
   printf '\n' >>"$target_file"
 }
 
+# Utility: create a temp file with fallback for Git Bash (mktemp may fail)
+qs_mktemp() {
+  local prefix="${1:-quick-shell}"
+  local tmp
+  tmp=$(mktemp "${TMPDIR:-/tmp}/${prefix}.XXXXXX" 2>/dev/null)
+  if [ -z "$tmp" ] || [ ! -f "$tmp" ]; then
+    tmp="${HOME}/.cache/${prefix}.$$.tmp"
+    mkdir -p "$(dirname "$tmp")" 2>/dev/null
+    : > "$tmp"
+  fi
+  printf '%s' "$tmp"
+}
+
 remove_legacy_starship_prompt_block() {
   local target_file=$1
   local tmp_file
@@ -673,7 +849,7 @@ remove_legacy_starship_prompt_block() {
     return 0
   fi
 
-  tmp_file=$(mktemp "${TMPDIR:-/tmp}/quick-shell-block.XXXXXX")
+  tmp_file=$(qs_mktemp "quick-shell-block")
 
   awk '
     $0 == "if command -v starship >/dev/null 2>&1; then" {
@@ -702,7 +878,7 @@ ensure_prompt_zinit_block() {
     return 0
   fi
 
-  block_file=$(mktemp "${TMPDIR:-/tmp}/quick-shell-block.XXXXXX")
+  block_file=$(qs_mktemp "quick-shell-block")
   get_prompt_zinit_block >"$block_file"
 
   if grep -Fq "$PROMPT_ZINIT_BEGIN" "$target_file"; then
@@ -730,7 +906,7 @@ ensure_prompt_init_block() {
 
   remove_legacy_starship_prompt_block "$target_file"
 
-  block_file=$(mktemp "${TMPDIR:-/tmp}/quick-shell-block.XXXXXX")
+  block_file=$(qs_mktemp "quick-shell-block")
   get_prompt_init_block >"$block_file"
 
   if grep -Fq "$PROMPT_INIT_BEGIN" "$target_file"; then
@@ -750,8 +926,8 @@ ensure_starship_config() {
   local downloaded_config managed_block
 
   mkdir -p "$(dirname "$target_config")"
-  downloaded_config=$(mktemp "${TMPDIR:-/tmp}/quick-shell-starship.XXXXXX")
-  managed_block=$(mktemp "${TMPDIR:-/tmp}/quick-shell-starship.XXXXXX")
+  downloaded_config=$(qs_mktemp "quick-shell-starship")
+  managed_block=$(qs_mktemp "quick-shell-starship")
 
   if ! curl -fsSL "$STARSHIP_CONFIG_URL" >"$downloaded_config"; then
     rm -f "$downloaded_config" "$managed_block"
