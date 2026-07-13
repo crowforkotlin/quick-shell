@@ -1,0 +1,250 @@
+# --- 1. 修复 tmux 下的 UTF-8 和色彩问题 ---
+bindkey -v
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+# 只在 tmux 外部设置，tmux 内部不覆盖
+if [[ -z "$TMUX" ]]; then
+    export TERM=xterm-256color
+fi
+
+# ==============================================================================
+# Zinit Core Initialization
+# ==============================================================================
+ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
+
+# Auto-install zinit if missing
+if [ ! -f "${ZINIT_HOME}/zinit.zsh" ]; then
+    mkdir -p "$(dirname $ZINIT_HOME)"
+    if ! git clone --depth=1 https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME" >/dev/null 2>&1; then
+        echo "[quick-shell] Warning: failed to install zinit; skipping zinit plugins." >&2
+    fi
+fi
+
+if [ -f "${ZINIT_HOME}/zinit.zsh" ]; then
+    source "${ZINIT_HOME}/zinit.zsh"
+    # >>> quick-shell prompt plugin >>>
+    # <<< quick-shell prompt plugin <<<
+
+    # ==============================================================================
+    # Plugins
+    # ==============================================================================
+    # Syntax Highlighting (must be loaded last or near last)
+    # Only apply this block in Windows environments (Git Bash / MSYS2)
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+
+        # Disable syntax highlighting in VS Code integrated terminal
+        # to prevent input lag and UI stuttering on Windows.
+        if [[ "$TERM_PROGRAM" != "vscode" ]]; then
+            zinit light zsh-users/zsh-syntax-highlighting
+        fi
+
+    fi
+
+    # Auto Suggestions
+    zinit light zsh-users/zsh-autosuggestions
+
+    # z - jump to frecent directories
+    zinit light agkozak/zsh-z
+
+    # fzf tab completion
+    zinit light Aloxaf/fzf-tab
+
+    # OMZ snippets (git aliases, extract, etc.)
+    zinit snippet OMZP::git
+    zinit snippet OMZP::extract
+
+    # fzf key bindings (Ctrl+R / Ctrl+T / Alt+C)
+    # wait'0' 异步加载，避免阻塞 shell 启动
+    zinit ice lucid wait'0' multisrc'shell/key-bindings.zsh shell/completion.zsh'
+    zinit light junegunn/fzf
+
+    # ==============================================================================
+    # Completion System
+    # ==============================================================================
+    autoload -Uz compinit
+    compinit -u
+
+    # Replay all cached completions (zinit optimization)
+    zinit cdreplay -q
+else
+    echo "[quick-shell] Warning: zinit is unavailable; shell started without zinit plugins." >&2
+fi
+
+# --- Quick Shell Auto-Loader ---
+QS_DIR="__QS_TARGET_DIR__"
+if [ -d "$QS_DIR" ]; then
+    for script in "$QS_DIR"/*(N); do
+        if [ -f "$script" ]; then
+            filename=$(basename "$script")
+            alias_name="${filename%.*}"
+            alias "$alias_name"="bash '$script'"
+        fi
+    done
+fi
+
+# >>> quick-shell prompt init >>>
+if command -v starship >/dev/null 2>&1; then
+  _starship_bin="$(command -v starship)"
+
+  # Source init.zsh if available (functions/hooks), otherwise define manually
+  _starship_init="${_starship_bin:h}/init.zsh"
+  if [ -f "$_starship_init" ]; then
+    source "$_starship_init"
+  else
+    # --- Manual init (replaces starship init zsh, avoids quoted-path issues on Windows) ---
+    zmodload zsh/parameter
+    if [[ $ZSH_VERSION == ([1-4]*) ]]; then
+      __starship_get_time() { STARSHIP_CAPTURED_TIME=$("${_starship_bin}" time); }
+    else
+      zmodload zsh/datetime zsh/mathfunc
+      __starship_get_time() { (( STARSHIP_CAPTURED_TIME = int(rint(EPOCHREALTIME * 1000)) )); }
+    fi
+    prompt_starship_precmd() {
+      STARSHIP_CMD_STATUS=$? STARSHIP_PIPE_STATUS=(${pipestatus[@]})
+      if (( ${+STARSHIP_START_TIME} )); then
+        __starship_get_time && STARSHIP_DURATION=$(( STARSHIP_CAPTURED_TIME - STARSHIP_START_TIME ))
+        unset STARSHIP_START_TIME
+      else
+        unset STARSHIP_DURATION STARSHIP_CMD_STATUS STARSHIP_PIPE_STATUS
+      fi
+      STARSHIP_JOBS_COUNT="${#jobstates[*]}"
+    }
+    prompt_starship_preexec() {
+      __starship_get_time && STARSHIP_START_TIME=$STARSHIP_CAPTURED_TIME
+    }
+    autoload -Uz add-zsh-hook
+    add-zsh-hook precmd prompt_starship_precmd
+    add-zsh-hook preexec prompt_starship_preexec
+    starship_zle-keymap-select() { zle reset-prompt; }
+    if [[ -v widgets[zle-keymap-select] ]]; then
+      __starship_preserved_zle_keymap_select=${widgets[zle-keymap-select]#user:}
+    fi
+    if [[ -z ${__starship_preserved_zle_keymap_select:-} ]]; then
+      zle -N zle-keymap-select starship_zle-keymap-select
+    else
+      starship_zle-keymap-select-wrapped() {
+        $__starship_preserved_zle_keymap_select "$@"
+        starship_zle-keymap-select "$@"
+      }
+      zle -N zle-keymap-select starship_zle-keymap-select-wrapped
+    fi
+    export STARSHIP_SHELL="zsh"
+    STARSHIP_SESSION_KEY="$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM"
+    STARSHIP_SESSION_KEY="${STARSHIP_SESSION_KEY}0000000000000000"
+    export STARSHIP_SESSION_KEY=${STARSHIP_SESSION_KEY:0:16}
+    VIRTUAL_ENV_DISABLE_PROMPT=1
+    # --- End manual init ---
+  fi
+  unset _starship_init
+
+  # PROMPT vars: use 'path' quoting inside $() — safe even when path contains spaces
+  PROMPT="\$('${_starship_bin}' prompt --terminal-width=\"\$COLUMNS\" --keymap=\"\${KEYMAP:-}\" --status=\"\${STARSHIP_CMD_STATUS:-}\" --pipestatus=\"\${STARSHIP_PIPE_STATUS[*]:-}\" --cmd-duration=\"\${STARSHIP_DURATION:-}\" --jobs=\"\$STARSHIP_JOBS_COUNT\")"
+  RPROMPT="\$('${_starship_bin}' prompt --right --terminal-width=\"\$COLUMNS\" --keymap=\"\${KEYMAP:-}\" --status=\"\${STARSHIP_CMD_STATUS:-}\" --pipestatus=\"\${STARSHIP_PIPE_STATUS[*]:-}\" --cmd-duration=\"\${STARSHIP_DURATION:-}\" --jobs=\"\$STARSHIP_JOBS_COUNT\")"
+  PROMPT2="\$('${_starship_bin}' prompt --continuation)"
+  setopt promptsubst
+else
+  echo "[quick-shell] Warning: starship is unavailable; prompt theme not loaded." >&2
+fi
+# <<< quick-shell prompt init >>>
+
+
+# --- History ---
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=15000
+SAVEHIST=20000
+setopt HIST_IGNORE_DUPS      # Skip duplicate commands
+setopt HIST_IGNORE_SPACE     # Skip commands prefixed with space
+setopt INC_APPEND_HISTORY    # Write to history immediately, not on exit
+setopt SHARE_HISTORY         # Share history across all open sessions
+
+# Fix Ctrl+Arrow in Git Bash / Windows Terminal
+# Fix arrow keys
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+  bindkey "^[[A" up-line-or-history    # Up
+  bindkey "^[[1;5B" down-line-or-history # Ctrl+Down
+  # 1. 强制 Zsh 使用 Emacs 风格键位 (防 nvim 篡改)
+  bindkey -e
+
+  # 2. 修复基础编辑键 (删除与退格)
+  bindkey "^[[3~" delete-char              # Delete (向后删除单个字符)
+  bindkey "^[[3;5~" kill-word              # Ctrl + Delete (向后删除整个单词)
+  bindkey "^[[3;3~" kill-word              # Alt + Delete (向后删除整个单词)
+
+  bindkey '^[^?' backward-kill-word        # Alt + Backspace (向前删除单词)
+  bindkey '^[^H' backward-kill-word        # Alt + Backspace (变种)
+
+  # 3. 修复 Home 和 End 键
+  bindkey "^[[H" beginning-of-line
+  bindkey "^[[F" end-of-line
+
+  # 4. 修复基础方向键
+  bindkey "^[[A" up-line-or-history
+  bindkey "^[[B" down-line-or-history
+  bindkey "^[[C" forward-char
+  bindkey "^[[D" backward-char
+
+  # 5. 修复 Ctrl + 左右方向键 (跳过单词)
+  bindkey "^[[1;5C" forward-word           # Windows Terminal 标准 Ctrl+Right
+  bindkey "^[[1;5D" backward-word          # Windows Terminal 标准 Ctrl+Left
+  bindkey "^[O5C"   forward-word           # Tmux 变种 Ctrl+Right
+  bindkey "^[O5D"   backward-word          # Tmux 变种 Ctrl+Left
+  bindkey "^[Oc"    forward-word           # rxvt 变种 Ctrl+Right
+  bindkey "^[Od"    backward-word          # rxvt 变种 Ctrl+Left
+
+  # 6. 修复 Alt + 左右方向键 (跳过单词)
+  bindkey "^[[1;3C" forward-word           # 标准 Alt+Right
+  bindkey "^[[1;3D" backward-word          # 标准 Alt+Left
+  bindkey "^[^[[C"  forward-word           # Git Bash 嵌套 Alt+Right (输出C的元凶)
+  bindkey "^[^[[D"  backward-word          # Git Bash 嵌套 Alt+Left (输出D的元凶)
+fi
+# ------------------
+
+# --- Quick Functions ---
+lt(){ d=10; t="."; for a in "$@"; do [[ "$a" =~ ^[0-9]+$ ]] && d="$a" || { [[ -e "$a" ]] && t="$a"; }; done; lsd --tree --depth "$d" --blocks name "$t"; }
+cdw(){ t=$(which "$1" 2>/dev/null); [[ -n "$t" ]] && { pushd "$(dirname "$t")" > /dev/null; } || echo "找不到程序: $1"; }
+
+gitdc(){ o=$(git -p diff HEAD;echo "---";git status); echo "$o" | { wl-copy 2>/dev/null || pbcopy || clip.exe || xclip -sel c || xsel -b; } && echo "✅ Copied ($(echo "$o" | wc -l) lines)"; }
+gitdf(){ o=$(git -p diff HEAD;echo "---";git status); echo "$o" > "${1:-commit_message.txt}" && echo "✅ Saved to ${1:-commit_message.txt} ($(echo "$o" | wc -l) lines)"; }
+stowlink() { [ -z "$2" ] && echo "Usage: stowlink <dir> <pkg>" || (mkdir -p "$1" && stow -t "$1" "$2"); }
+stowlink-auto() { [ -z "$2" ] && echo "Usage: stowlink-auto <parent_path> <pkg>" || (T="${1%/}/$2" && mkdir -p "$T" && stow -t "$T" "$2"); }
+stowlink-dir() { [ -z "$2" ] && echo "Usage: stowlink-dir <parent> <pkg>" || { [ -d "$PWD/$2" ] && mkdir -p "$1" && ln -sfn "$PWD/$2" "${1%/}/$2" && echo "Linked: ${1%/}/$2 -> $PWD/$2"; } }
+mf() { local dir="${1:-.}"; [[ "$dir" != /* ]] && dir="$PWD/$dir"; local out=""; local files=(); while IFS= read -r -d '' f; do files+=("$f"); done < <(find "$dir" -type f -print0 | sort -z); for f in "${files[@]}"; do out+="--- $(basename "$f") ---"$'\n'"$(cat "$f")"$'\n\n'; done; if [ ${#out} -gt 1000 ]; then echo "$out" > contents.txt; echo "Saved to contents.txt"; else echo "$out" | tee /dev/clipboard 2>/dev/null || echo "$out" | { command -v pbcopy &>/dev/null && pbcopy || command -v xclip &>/dev/null && xclip -selection clipboard || command -v xsel &>/dev/null && xsel --clipboard --input || clip; }; echo "Copied to clipboard"; fi; }
+gitmerge() { git -c log.showSignature=false merge "origin/${1:-$(git branch --show-current)}" --no-stat -v; }
+pacmirror(){ sudo reflector -c "${1:-CN}" -l "${2:-10}" --protocol https --sort rate --save /etc/pacman.d/mirrorlist && sudo pacman -Syyu; }
+
+# --- Aliases ---
+alias ll='command -v lsd &>/dev/null && lsd -l --ignore-config'
+alias lla='command -v lsd &>/dev/null && lsd -a -l --ignore-config'
+alias ls='command -v lsd &>/dev/null && lsd --ignore-config || ls'
+alias lsa='command -v lsd &>/dev/null && lsd -a --ignore-config || ls -a'
+alias batall='command -v bat &>/dev/null && bat --paging=never || cat'
+alias gitfetch='git -c log.showSignature=false -c core.quotepath=false fetch origin --recurse-submodules=no --progress --prune'
+# alias sys-update='sudo pacman -Syu --noconfirm && yay -Sua --noconfirm && paru -Sua --noconfirm'
+# alias aur-clean='sudo pacman -Scc --noconfirm && yay -Scc --noconfirm && paru -Scc --noconfirm'
+
+# --- Environment ---
+#export http_proxy=http://127.0.0.1:7890
+#export https_proxy=http://127.0.0.1:7890
+#export NO_PROXY="localhost,127.0.0.1"
+
+# --- Paths ---
+[[ -f /usr/share/nvm/init-nvm.sh ]] && source /usr/share/nvm/init-nvm.sh
+export JAVA_TOOL_OPTIONS="-Duser.language=en -Duser.country=US"
+export JENV_ROOT="$HOME/.jenv"
+export ZVM_INSTALL="$HOME/.zvm/self"
+
+# yay -S gvm-bin
+PATH_ENTRIES=(
+  "$HOME/.local/bin"
+  "$HOME/.gvm/bin"
+  "$JENV_ROOT/bin"
+  "$HOME/.zvm/bin"
+  "$ZVM_INSTALL"
+  "$PATH"
+)
+
+export PATH="$(IFS=:; echo "${PATH_ENTRIES[*]}")"
+export JAVA_TOOL_OPTIONS="-XX:-HeapDumpOnOutOfMemoryError"
+command -v jenv &>/dev/null && eval "$(jenv init -)"
+command -v pyenv &>/dev/null && eval "$(pyenv init -)"
