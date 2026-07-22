@@ -76,23 +76,32 @@ git_clone_fallback() {
   local url="$1"   # https://github.com/owner/repo.git
   local dest="$2"
 
+  # Clean up any partial directory from a previous failed attempt
+  rm -rf "$dest" 2>/dev/null
+
   # Try git clone first
   if git clone --depth=1 "$url" "$dest" -q 2>/dev/null; then
     return 0
   fi
 
   log_warn "git clone failed, trying curl tarball fallback..."
-  # Convert git URL to tarball URL: https://github.com/owner/repo.git -> https://github.com/owner/repo/archive/refs/heads/HEAD.tar.gz
-  local tarball_url="${url%.git}/archive/refs/heads/HEAD.tar.gz"
+  # Convert git URL to base: https://github.com/owner/repo.git -> https://github.com/owner/repo
+  local base_url="${url%.git}"
   local tmp_tar="/tmp/qs_clone_$$.tar.gz"
+  local branch
 
-  if curl -fsSL "$tarball_url" -o "$tmp_tar" 2>/dev/null; then
-    mkdir -p "$dest"
-    if tar -xzf "$tmp_tar" -C "$dest" --strip-components=1 2>/dev/null; then
-      rm -f "$tmp_tar"
-      return 0
+  # Try common default branch names
+  for branch in main master; do
+    if curl -fsSL "${base_url}/archive/refs/heads/${branch}.tar.gz" -o "$tmp_tar" 2>/dev/null; then
+      mkdir -p "$dest"
+      if tar -xzf "$tmp_tar" -C "$dest" --strip-components=1 2>/dev/null; then
+        rm -f "$tmp_tar"
+        return 0
+      fi
+      rm -rf "$dest"
     fi
-  fi
+  done
+
   rm -f "$tmp_tar"
   return 1
 }
@@ -462,8 +471,8 @@ install_plugins() {
   local plugin_failures=0
   ZINIT_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/zinit/zinit.git"
 
-  # Install Zinit Core
-  if [ ! -d "$ZINIT_HOME" ]; then
+  # Install Zinit Core (check for actual file, not just directory)
+  if [ ! -f "$ZINIT_HOME/zinit.zsh" ]; then
     log_info "Installing Zinit Plugin Manager..."
     mkdir -p "$(dirname "$ZINIT_HOME")"
     if ! git_clone_fallback "https://github.com/zdharma-continuum/zinit.git" "$ZINIT_HOME"; then
