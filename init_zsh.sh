@@ -71,6 +71,9 @@ sed_inplace() {
   fi
 }
 
+# Network timeout settings (seconds)
+CURL_TIMEOUT="--connect-timeout 10 --max-time 60"
+
 # Cross-platform git clone with curl tarball fallback
 git_clone_fallback() {
   local url="$1"   # https://github.com/owner/repo.git
@@ -92,7 +95,7 @@ git_clone_fallback() {
 
   # Try common default branch names
   for branch in main master; do
-    if curl -fsSL "${base_url}/archive/refs/heads/${branch}.tar.gz" -o "$tmp_tar" 2>/dev/null; then
+    if curl -fsSL $CURL_TIMEOUT "${base_url}/archive/refs/heads/${branch}.tar.gz" -o "$tmp_tar" 2>/dev/null; then
       mkdir -p "$dest"
       if tar -xzf "$tmp_tar" -C "$dest" --strip-components=1 2>/dev/null; then
         rm -f "$tmp_tar"
@@ -455,7 +458,7 @@ config_zshrc() {
   if command -v starship >/dev/null 2>&1; then
     log_info "Syncing Starship config..."
     mkdir -p "$HOME/.config"
-    if curl -fsSL "$STARSHIP_CONFIG_URL" -o "$HOME/.config/starship.toml" 2>/dev/null; then
+    if curl -fsSL $CURL_TIMEOUT "$STARSHIP_CONFIG_URL" -o "$HOME/.config/starship.toml" 2>/dev/null; then
       log_success "Starship config updated."
     else
       log_warn "Failed to download starship config, keeping existing config."
