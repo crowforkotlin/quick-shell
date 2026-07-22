@@ -62,6 +62,41 @@ log_success() { printf "${GREEN} 🟢 [PASS]${NC} %s\n" "$1"; }
 log_warn() { printf "${YELLOW} 🟡 [WARN]${NC} %s\n" "$1"; }
 log_error() { printf "${RED} 🔴 [FAIL]${NC} %s\n" "$1"; }
 
+# Cross-platform sed in-place (macOS requires '' after -i)
+sed_inplace() {
+  if [ "$(uname)" = "Darwin" ]; then
+    sed -i '' "$@"
+  else
+    sed -i "$@"
+  fi
+}
+
+# Cross-platform git clone with curl tarball fallback
+git_clone_fallback() {
+  local url="$1"   # https://github.com/owner/repo.git
+  local dest="$2"
+
+  # Try git clone first
+  if git clone --depth=1 "$url" "$dest" -q 2>/dev/null; then
+    return 0
+  fi
+
+  log_warn "git clone failed, trying curl tarball fallback..."
+  # Convert git URL to tarball URL: https://github.com/owner/repo.git -> https://github.com/owner/repo/archive/refs/heads/HEAD.tar.gz
+  local tarball_url="${url%.git}/archive/refs/heads/HEAD.tar.gz"
+  local tmp_tar="/tmp/qs_clone_$$.tar.gz"
+
+  if curl -fsSL "$tarball_url" -o "$tmp_tar" 2>/dev/null; then
+    mkdir -p "$dest"
+    if tar -xzf "$tmp_tar" -C "$dest" --strip-components=1 2>/dev/null; then
+      rm -f "$tmp_tar"
+      return 0
+    fi
+  fi
+  rm -f "$tmp_tar"
+  return 1
+}
+
 # Step Divider
 print_step() {
   echo ""
@@ -399,8 +434,8 @@ config_zshrc() {
     fi
 
     cp "$SCRIPT_DIR/zshrc.template" "$HOME/.zshrc"
-    # Replace placeholder with actual TARGET_DIR
-    sed -i "s|__QS_TARGET_DIR__|${TARGET_DIR}|g" "$HOME/.zshrc"
+    # Replace placeholder with actual TARGET_DIR (cross-platform sed)
+    sed_inplace "s|__QS_TARGET_DIR__|${TARGET_DIR}|g" "$HOME/.zshrc"
 
     log_success ".zshrc installed successfully."
   else
@@ -431,7 +466,7 @@ install_plugins() {
   if [ ! -d "$ZINIT_HOME" ]; then
     log_info "Installing Zinit Plugin Manager..."
     mkdir -p "$(dirname "$ZINIT_HOME")"
-    if ! git clone --depth=1 https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME" -q; then
+    if ! git_clone_fallback "https://github.com/zdharma-continuum/zinit.git" "$ZINIT_HOME"; then
       log_error "Failed to install Zinit Plugin Manager."
       return 1
     fi
@@ -447,7 +482,7 @@ install_plugins() {
       if [ "$FORCE_RECLONE" = true ] || [ "$CLEAN_INSTALL" = true ]; then
         printf "  📦 %-25s : ${YELLOW}Reinstalling...${NC}\n" "$name"
         rm -rf "$path"
-        if ! git clone --depth=1 "$url" "$path" -q; then
+        if ! git_clone_fallback "$url" "$path"; then
           echo "    ❌ Reinstall Failed"
           return 1
         fi
@@ -460,7 +495,7 @@ install_plugins() {
       fi
     else
       printf "  📦 %-25s : ${GREEN}Installing...${NC}\n" "$name"
-      if ! git clone --depth=1 "$url" "$path" -q; then
+      if ! git_clone_fallback "$url" "$path"; then
         echo "    ❌ Install Failed"
         return 1
       fi
@@ -550,6 +585,13 @@ fi
       log_info "Attempting to switch shell using 'chsh'..."
       ZSH_PATH=$(command -v zsh 2>/dev/null)
       if [ -n "$ZSH_PATH" ]; then
+        # macOS: ensure the shell is listed in /etc/shells
+        if [ "$OS_TYPE" = "MacOS" ]; then
+          if ! grep -qx "$ZSH_PATH" /etc/shells 2>/dev/null; then
+            log_info "Adding $ZSH_PATH to /etc/shells (requires sudo)..."
+            echo "$ZSH_PATH" | sudo tee -a /etc/shells >/dev/null
+          fi
+        fi
         if ! chsh -s "$ZSH_PATH"; then
           log_warn "Auto-switch failed. Please run manually: chsh -s $ZSH_PATH"
           return 1
